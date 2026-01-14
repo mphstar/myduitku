@@ -251,7 +251,7 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      builder: (context) => Padding(
+      builder: (sheetContext) => Padding(
         padding: const EdgeInsets.all(20),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -270,7 +270,7 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                   ? 'Pengeluaran'
                   : 'Pemasukan',
               style: Theme.of(
-                context,
+                sheetContext,
               ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 20),
@@ -292,7 +292,7 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                 Expanded(
                   child: OutlinedButton.icon(
                     onPressed: () async {
-                      Navigator.pop(context);
+                      Navigator.pop(sheetContext);
                       final confirm = await DialogHelper.showConfirmation(
                         context,
                         title: 'Hapus Transaksi?',

@@ -394,6 +394,25 @@ class _ReportScreenState extends State<ReportScreen> {
               BarChartData(
                 alignment: BarChartAlignment.spaceAround,
                 maxY: _getMaxY(groupedData),
+                barTouchData: BarTouchData(
+                  enabled: true,
+                  touchTooltipData: BarTouchTooltipData(
+                    getTooltipColor: (group) =>
+                        Theme.of(context).cardTheme.color ?? Colors.white,
+                    tooltipPadding: const EdgeInsets.all(8),
+                    tooltipMargin: 8,
+                    getTooltipItem: (group, groupIndex, rod, rodIndex) {
+                      return BarTooltipItem(
+                        CurrencyFormatter.format(rod.toY),
+                        TextStyle(
+                          color: rod.color,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14,
+                        ),
+                      );
+                    },
+                  ),
+                ),
                 barGroups: groupedData.asMap().entries.map((entry) {
                   final index = entry.key;
                   final data = entry.value;
