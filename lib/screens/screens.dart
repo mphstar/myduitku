@@ -1,0 +1,10 @@
+export 'splash_screen.dart';
+export 'main_screen.dart';
+export 'dashboard/dashboard_screen.dart';
+export 'accounts/accounts_screen.dart';
+export 'transactions/transactions_screen.dart';
+export 'budget/budget_screen.dart';
+export 'goals/goals_screen.dart';
+export 'profile/profile_screen.dart';
+export 'categories/categories_screen.dart';
+export 'report/report_screen.dart';
