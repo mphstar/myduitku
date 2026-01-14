@@ -28,6 +28,25 @@ class AppConstants {
   // Animation durations
   static const Duration animationDuration = Duration(milliseconds: 300);
   static const Duration splashDuration = Duration(seconds: 2);
+
+  // AI Chat
+  static const String chatMessagesBox = 'chat_messages';
+  static const String openRouterApiUrl =
+      'https://openrouter.ai/api/v1/chat/completions';
+  static const String aiApiKeyKey = 'ai_api_key';
+  static const String aiModelKey = 'ai_model';
+  static const String defaultAiModel = 'google/gemini-2.0-flash-001';
+
+  // Available AI models
+  static const List<Map<String, String>> availableAiModels = [
+    {'id': 'google/gemini-2.0-flash-001', 'name': 'Gemini 2.0 Flash'},
+    {'id': 'google/gemini-pro', 'name': 'Gemini Pro'},
+    {'id': 'anthropic/claude-3.5-sonnet', 'name': 'Claude 3.5 Sonnet'},
+    {'id': 'anthropic/claude-3-haiku', 'name': 'Claude 3 Haiku'},
+    {'id': 'openai/gpt-4o-mini', 'name': 'GPT-4o Mini'},
+    {'id': 'openai/gpt-4o', 'name': 'GPT-4o'},
+    {'id': 'meta-llama/llama-3.1-8b-instruct', 'name': 'Llama 3.1 8B'},
+  ];
 }
 
 /// Icon name to IconData mapping

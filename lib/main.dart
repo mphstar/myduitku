@@ -32,6 +32,7 @@ class MyDuitKuApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => BudgetProvider()),
         ChangeNotifierProvider(create: (_) => GoalProvider()),
         ChangeNotifierProvider(create: (_) => UserProvider()),
+        ChangeNotifierProvider(create: (_) => AiChatProvider()),
       ],
       child: MaterialApp(
         title: 'MyDuitKu',

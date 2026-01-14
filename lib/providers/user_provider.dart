@@ -28,11 +28,15 @@ class UserProvider extends ChangeNotifier {
     String? name,
     String? photoPath,
     String? currency,
+    String? aiApiKey,
+    String? aiModel,
   }) async {
     _profile = _profile.copyWith(
       name: name ?? _profile.name,
       photoPath: photoPath ?? _profile.photoPath,
       currency: currency ?? _profile.currency,
+      aiApiKey: aiApiKey ?? _profile.aiApiKey,
+      aiModel: aiModel ?? _profile.aiModel,
     );
 
     await _db.saveUserProfile(_profile);

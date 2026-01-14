@@ -3,8 +3,8 @@ import '../core/theme.dart';
 import 'dashboard/dashboard_screen.dart';
 import 'accounts/accounts_screen.dart';
 import 'transactions/transactions_screen.dart';
-
 import 'report/report_screen.dart';
+import 'ai_chat/ai_chat_screen.dart';
 
 /// Main screen with bottom navigation
 class MainScreen extends StatefulWidget {
@@ -51,6 +51,18 @@ class _MainScreenState extends State<MainScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       body: IndexedStack(index: _currentIndex, children: _screens),
+      floatingActionButton: _currentIndex == 2
+          ? null // Hide FAB on Transactions tab (it has its own FAB)
+          : FloatingActionButton(
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const AiChatScreen()),
+                );
+              },
+              backgroundColor: AppColors.primary,
+              child: const Icon(Icons.smart_toy, color: Colors.white),
+            ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _currentIndex,
         onDestinationSelected: (index) {

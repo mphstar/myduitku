@@ -7,6 +7,7 @@ import '../../models/models.dart';
 import '../../providers/providers.dart';
 import '../../widgets/common_widgets.dart';
 import '../budget/budget_screen.dart';
+import '../goals/goals_screen.dart';
 import '../profile/profile_screen.dart';
 
 /// Dashboard screen with financial overview
@@ -574,7 +575,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ),
             ),
             const SizedBox(width: 16),
-            const Spacer(),
+            Expanded(
+              child: _buildQuickActionCard(
+                'Target',
+                Icons.flag,
+                AppColors.secondary,
+                () => Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const GoalsScreen()),
+                ),
+              ),
+            ),
           ],
         ),
       ],

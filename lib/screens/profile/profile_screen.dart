@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../core/theme.dart';
+import '../../core/constants.dart';
 import '../../providers/providers.dart';
 import '../../services/services.dart';
 import '../../widgets/common_widgets.dart';
@@ -85,6 +86,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       builder: (context) => const CategoriesScreen(),
                     ),
                   ),
+                ),
+                _buildTile(
+                  Icons.smart_toy_outlined,
+                  'Pengaturan AI',
+                  () => _showAiSettingsDialog(context),
                 ),
               ]),
               const SizedBox(height: 16),
@@ -233,6 +239,113 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   name: nameController.text,
                 );
                 if (context.mounted) Navigator.pop(context);
+              }
+            },
+            child: const Text('Simpan'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showAiSettingsDialog(BuildContext context) {
+    final userProvider = context.read<UserProvider>();
+    final apiKeyController = TextEditingController(
+      text: userProvider.profile.aiApiKey ?? '',
+    );
+    final modelController = TextEditingController(
+      text: userProvider.profile.aiModel ?? AppConstants.defaultAiModel,
+    );
+
+    showDialog(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Pengaturan AI'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'API Key OpenRouter',
+                style: TextStyle(fontWeight: FontWeight.w500),
+              ),
+              const SizedBox(height: 4),
+              TextField(
+                controller: apiKeyController,
+                decoration: InputDecoration(
+                  hintText: 'Masukkan API Key',
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 12,
+                  ),
+                ),
+                obscureText: true,
+              ),
+              const SizedBox(height: 8),
+              InkWell(
+                onTap: () {
+                  // Open OpenRouter website
+                  SnackBarHelper.showInfo(
+                    dialogContext,
+                    'Buka https://openrouter.ai untuk mendapatkan API Key',
+                  );
+                },
+                child: Text(
+                  'Dapatkan API Key di openrouter.ai',
+                  style: TextStyle(color: AppColors.primary, fontSize: 12),
+                ),
+              ),
+              const SizedBox(height: 20),
+              const Text(
+                'Model AI',
+                style: TextStyle(fontWeight: FontWeight.w500),
+              ),
+              const SizedBox(height: 4),
+              TextField(
+                controller: modelController,
+                decoration: InputDecoration(
+                  hintText: 'Contoh: google/gemini-2.0-flash-001',
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 12,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Masukkan ID model dari OpenRouter.\nContoh: google/gemini-2.0-flash-001, openai/gpt-4o-mini',
+                style: TextStyle(color: Colors.grey[600], fontSize: 12),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Batal'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              final modelValue = modelController.text.trim().isEmpty
+                  ? AppConstants.defaultAiModel
+                  : modelController.text.trim();
+              await userProvider.updateProfile(
+                aiApiKey: apiKeyController.text.trim(),
+                aiModel: modelValue,
+              );
+              if (dialogContext.mounted) {
+                Navigator.pop(dialogContext);
+                SnackBarHelper.showSuccess(
+                  this.context,
+                  'Pengaturan AI berhasil disimpan',
+                );
               }
             },
             child: const Text('Simpan'),

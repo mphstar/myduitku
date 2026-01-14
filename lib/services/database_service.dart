@@ -15,6 +15,7 @@ class DatabaseService {
   late Box<String> _budgetsBox;
   late Box<String> _goalsBox;
   late Box<String> _settingsBox;
+  late Box<String> _chatMessagesBox;
 
   bool _isInitialized = false;
 
@@ -31,6 +32,7 @@ class DatabaseService {
     _budgetsBox = await Hive.openBox<String>(AppConstants.budgetsBox);
     _goalsBox = await Hive.openBox<String>(AppConstants.goalsBox);
     _settingsBox = await Hive.openBox<String>(AppConstants.settingsBox);
+    _chatMessagesBox = await Hive.openBox<String>(AppConstants.chatMessagesBox);
 
     // Seed default categories if empty
     await _seedDefaultCategories();
@@ -315,6 +317,29 @@ class DatabaseService {
     await _goalsBox.clear();
     await _settingsBox.clear();
     await _categoriesBox.clear();
+    await _chatMessagesBox.clear();
     await _seedDefaultCategories();
+  }
+
+  // ============== CHAT MESSAGES ==============
+
+  List<ChatMessage> getChatMessages() {
+    final messages = _chatMessagesBox.values
+        .map((json) => ChatMessage.fromJson(jsonDecode(json)))
+        .toList();
+    messages.sort((a, b) => a.timestamp.compareTo(b.timestamp));
+    return messages;
+  }
+
+  Future<void> saveChatMessage(ChatMessage message) async {
+    await _chatMessagesBox.put(message.id, jsonEncode(message.toJson()));
+  }
+
+  Future<void> deleteChatMessage(String id) async {
+    await _chatMessagesBox.delete(id);
+  }
+
+  Future<void> clearChatMessages() async {
+    await _chatMessagesBox.clear();
   }
 }
