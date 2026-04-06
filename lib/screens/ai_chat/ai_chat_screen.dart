@@ -693,6 +693,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
           Consumer<AiChatProvider>(
             builder: (context, aiChat, _) {
               return FloatingActionButton(
+                heroTag: 'ai_chat_fab',
                 onPressed: aiChat.isLoading ? null : _sendMessage,
                 mini: true,
                 child: aiChat.isLoading

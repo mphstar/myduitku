@@ -208,6 +208,14 @@ class _AccountsScreenState extends State<AccountsScreen> {
               },
             ),
             ListTile(
+              leading: const Icon(Icons.sync_alt),
+              title: const Text('Sesuaikan Saldo'),
+              onTap: () {
+                Navigator.pop(context);
+                _showAdjustBalanceDialog(context, account);
+              },
+            ),
+            ListTile(
               leading: const Icon(Icons.delete_outline, color: AppColors.error),
               title: const Text(
                 'Hapus Akun',
@@ -428,6 +436,233 @@ class _AccountsScreenState extends State<AccountsScreen> {
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  void _showAdjustBalanceDialog(BuildContext context, Account account) {
+    final actualBalanceController = TextEditingController(
+      text: account.balance.toStringAsFixed(0),
+    );
+    final noteController = TextEditingController(text: 'Penyesuaian Saldo');
+    String? selectedCategoryId;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) {
+          final actualBalance =
+              CurrencyInputFormatter.parse(actualBalanceController.text) ?? 0;
+          final currentBalance = account.balance;
+          final diff = actualBalance - currentBalance;
+          final isIncome = diff > 0;
+
+          return Padding(
+            padding: EdgeInsets.fromLTRB(
+              20,
+              20,
+              20,
+              MediaQuery.of(context).viewInsets.bottom + 20,
+            ),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Center(
+                    child: Container(
+                      width: 40,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade300,
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  Text(
+                    'Sesuaikan Saldo',
+                    style: Theme.of(context)
+                        .textTheme
+                        .titleLarge
+                        ?.copyWith(fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Saldo Tercatat Saat Ini: ${CurrencyFormatter.format(currentBalance)}',
+                    style: TextStyle(color: Colors.grey[600]),
+                  ),
+                  const SizedBox(height: 20),
+                  TextField(
+                    controller: actualBalanceController,
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [CurrencyInputFormatter()],
+                    onChanged: (value) {
+                      setState(() {
+                         // Reset category on diff sign change to avoid misclassification
+                         selectedCategoryId = null;
+                      });
+                    },
+                    decoration: const InputDecoration(
+                      labelText: 'Saldo Asli (Sebenarnya)',
+                      prefixText: 'Rp ',
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  if (diff != 0) ...[
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: isIncome
+                            ? AppColors.income.withOpacity(0.1)
+                            : AppColors.expense.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            isIncome
+                                ? Icons.arrow_downward
+                                : Icons.arrow_upward,
+                            color: isIncome
+                                ? AppColors.income
+                                : AppColors.expense,
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Selisih: ${isIncome ? '+' : '-'} ${CurrencyFormatter.format(diff.abs())}\n(Akan dicatat sebagai ${isIncome ? 'Pemasukan' : 'Pengeluaran'})',
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: isIncome
+                                    ? AppColors.income
+                                    : AppColors.expense,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Consumer<CategoryProvider>(
+                      builder: (context, categoryProvider, _) {
+                        final categories = isIncome
+                            ? categoryProvider.incomeCategories
+                            : categoryProvider.expenseCategories;
+
+                        // Ensure selected category is valid
+                        if (selectedCategoryId != null &&
+                            !categories.any((c) => c.id == selectedCategoryId)) {
+                          selectedCategoryId = null;
+                        }
+
+                        return DropdownButtonFormField<String>(
+                          value: selectedCategoryId,
+                          decoration: const InputDecoration(
+                            labelText: 'Kategori Penyesuaian',
+                          ),
+                          hint: const Text('Pilih kategori'),
+                          items: categories.map((cat) {
+                            return DropdownMenuItem(
+                              value: cat.id,
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    AppIcons.getIcon(cat.icon),
+                                    size: 16,
+                                    color: Color(cat.color),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Text(cat.name),
+                                ],
+                              ),
+                            );
+                          }).toList(),
+                          onChanged: (value) =>
+                              setState(() => selectedCategoryId = value),
+                        );
+                      },
+                    ),
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: noteController,
+                      decoration: const InputDecoration(
+                        labelText: 'Keterangan Tambahan (opsional)',
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                  ],
+                  if (diff == 0)
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 24),
+                      child: Center(
+                        child: Text(
+                          'Saldo asli sudah sama dengan saldo tercatat.',
+                          style: TextStyle(color: AppColors.success),
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                    ),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: diff == 0
+                          ? () => Navigator.pop(context)
+                          : () async {
+                              if (selectedCategoryId == null) {
+                                SnackBarHelper.showError(
+                                  context,
+                                  'Pilih kategori penyesuaian',
+                                );
+                                return;
+                              }
+
+                              final transactionProvider =
+                                  context.read<TransactionProvider>();
+                              final accountProvider =
+                                  context.read<AccountProvider>();
+
+                              await transactionProvider.addTransaction(
+                                amount: diff.abs(),
+                                type: isIncome
+                                    ? TransactionType.income
+                                    : TransactionType.expense,
+                                categoryId: selectedCategoryId!,
+                                accountId: account.id,
+                                description: noteController.text.isNotEmpty
+                                    ? noteController.text
+                                    : 'Penyesuaian Saldo',
+                                date: DateTime.now(),
+                              );
+
+                              await accountProvider.updateBalance(
+                                account.id,
+                                diff.abs(),
+                                isIncome
+                                    ? TransactionType.income
+                                    : TransactionType.expense,
+                              );
+
+                              if (context.mounted) {
+                                Navigator.pop(context);
+                                SnackBarHelper.showSuccess(
+                                  context,
+                                  'Saldo berhasil disesuaikan',
+                                );
+                              }
+                            },
+                      child: Text(diff == 0 ? 'Tutup' : 'Sesuaikan Saldo'),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
       ),
     );
   }

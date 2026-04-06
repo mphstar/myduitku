@@ -389,18 +389,19 @@ class _ReportScreenState extends State<ReportScreen> {
           ),
           const SizedBox(height: 16),
           SizedBox(
-            height: 200,
+            height: 250,
             child: BarChart(
               BarChartData(
-                alignment: BarChartAlignment.spaceAround,
+                alignment: BarChartAlignment.spaceEvenly,
                 maxY: _getMaxY(groupedData),
                 barTouchData: BarTouchData(
                   enabled: true,
                   touchTooltipData: BarTouchTooltipData(
                     getTooltipColor: (group) =>
-                        Theme.of(context).cardTheme.color ?? Colors.white,
-                    tooltipPadding: const EdgeInsets.all(8),
+                        Theme.of(context).cardTheme.color?.withOpacity(0.9) ?? Colors.white.withOpacity(0.9),
+                    tooltipPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                     tooltipMargin: 8,
+                    tooltipRoundedRadius: 8,
                     getTooltipItem: (group, groupIndex, rod, rodIndex) {
                       return BarTooltipItem(
                         CurrencyFormatter.format(rod.toY),
@@ -418,21 +419,32 @@ class _ReportScreenState extends State<ReportScreen> {
                   final data = entry.value;
                   return BarChartGroupData(
                     x: index,
+                    barsSpace: 4,
                     barRods: [
                       BarChartRodData(
                         toY: data['income'] ?? 0,
                         color: AppColors.income,
-                        width: 12,
+                        width: 14,
                         borderRadius: const BorderRadius.vertical(
-                          top: Radius.circular(4),
+                          top: Radius.circular(6),
+                        ),
+                        backDrawRodData: BackgroundBarChartRodData(
+                          show: true,
+                          toY: _getMaxY(groupedData),
+                          color: AppColors.income.withOpacity(0.05),
                         ),
                       ),
                       BarChartRodData(
                         toY: data['expense'] ?? 0,
                         color: AppColors.expense,
-                        width: 12,
+                        width: 14,
                         borderRadius: const BorderRadius.vertical(
-                          top: Radius.circular(4),
+                          top: Radius.circular(6),
+                        ),
+                        backDrawRodData: BackgroundBarChartRodData(
+                          show: true,
+                          toY: _getMaxY(groupedData),
+                          color: AppColors.expense.withOpacity(0.05),
                         ),
                       ),
                     ],
@@ -442,11 +454,18 @@ class _ReportScreenState extends State<ReportScreen> {
                   leftTitles: AxisTitles(
                     sideTitles: SideTitles(
                       showTitles: true,
-                      reservedSize: 50,
+                      reservedSize: 45,
                       getTitlesWidget: (value, meta) {
-                        return Text(
-                          _formatYAxisValue(value),
-                          style: const TextStyle(fontSize: 10),
+                        return Padding(
+                          padding: const EdgeInsets.only(right: 8),
+                          child: Text(
+                            _formatYAxisValue(value),
+                            style: TextStyle(
+                              fontSize: 10,
+                              color: Colors.grey[600],
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
                         );
                       },
                     ),
@@ -461,7 +480,11 @@ class _ReportScreenState extends State<ReportScreen> {
                             padding: const EdgeInsets.only(top: 8),
                             child: Text(
                               groupedData[index]['label'] ?? '',
-                              style: const TextStyle(fontSize: 10),
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: Colors.grey[600],
+                                fontWeight: FontWeight.w500,
+                              ),
                             ),
                           );
                         }
@@ -476,11 +499,24 @@ class _ReportScreenState extends State<ReportScreen> {
                     sideTitles: SideTitles(showTitles: false),
                   ),
                 ),
-                borderData: FlBorderData(show: false),
+                borderData: FlBorderData(
+                  show: true,
+                  border: Border(
+                    bottom: BorderSide(color: Colors.grey.withOpacity(0.2), width: 1),
+                    top: BorderSide.none,
+                    left: BorderSide.none,
+                    right: BorderSide.none,
+                  ),
+                ),
                 gridData: FlGridData(
                   show: true,
                   drawVerticalLine: false,
-                  horizontalInterval: _getMaxY(groupedData) / 4,
+                  horizontalInterval: _getMaxY(groupedData) == 0 ? 1 : _getMaxY(groupedData) / 4,
+                  getDrawingHorizontalLine: (value) => FlLine(
+                    color: Colors.grey.withOpacity(0.2),
+                    strokeWidth: 1,
+                    dashArray: [4, 4],
+                  ),
                 ),
               ),
             ),
@@ -544,28 +580,28 @@ class _ReportScreenState extends State<ReportScreen> {
           label = '$key:00';
           break;
         case ReportPeriod.weekly:
-          key = DateFormat('E').format(t.date);
-          label = key;
+          key = DateFormat('yyyyMMdd').format(t.date);
+          label = DateFormat('E', 'id').format(t.date);
           break;
         case ReportPeriod.monthly:
-          key = DateFormat('d').format(t.date);
-          label = key;
+          key = DateFormat('yyyyMMdd').format(t.date);
+          label = DateFormat('d MMM', 'id').format(t.date);
           break;
         case ReportPeriod.yearly:
-          key = DateFormat('MMM').format(t.date);
-          label = key;
+          key = DateFormat('yyyyMM').format(t.date);
+          label = DateFormat('MMM', 'id').format(t.date);
           break;
         case ReportPeriod.custom:
           final days = _endDate.difference(_startDate).inDays;
           if (days <= 7) {
-            key = DateFormat('E').format(t.date);
-            label = key;
+            key = DateFormat('yyyyMMdd').format(t.date);
+            label = DateFormat('E', 'id').format(t.date);
           } else if (days <= 31) {
-            key = DateFormat('d').format(t.date);
-            label = key;
+            key = DateFormat('yyyyMMdd').format(t.date);
+            label = DateFormat('d MMM', 'id').format(t.date);
           } else {
-            key = DateFormat('MMM').format(t.date);
-            label = key;
+            key = DateFormat('yyyyMM').format(t.date);
+            label = DateFormat('MMM yy', 'id').format(t.date);
           }
           break;
       }
@@ -581,6 +617,7 @@ class _ReportScreenState extends State<ReportScreen> {
         grouped[key]!['expense'] =
             (grouped[key]!['expense'] as double) + t.amount;
       }
+      // Force label update just in case
       grouped[key]!['label'] = label;
     }
 
@@ -649,18 +686,20 @@ class _ReportScreenState extends State<ReportScreen> {
                           value: entry.value,
                           title: '${percentage.toStringAsFixed(0)}%',
                           titleStyle: const TextStyle(
-                            fontSize: 10,
+                            fontSize: 11,
                             fontWeight: FontWeight.bold,
                             color: Colors.white,
+                            shadows: [Shadow(color: Colors.black26, blurRadius: 2)],
                           ),
-                          radius: 50,
+                          radius: 55,
+                          badgePositionPercentageOffset: 0.98,
                           color: category != null
                               ? Color(category.color)
                               : Colors.grey,
                         );
                       }).toList(),
                       centerSpaceRadius: 35,
-                      sectionsSpace: 2,
+                      sectionsSpace: 4,
                     ),
                   ),
                 ),

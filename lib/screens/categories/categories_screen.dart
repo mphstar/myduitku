@@ -71,6 +71,7 @@ class _CategoriesScreenState extends State<CategoriesScreen>
         },
       ),
       floatingActionButton: FloatingActionButton(
+        heroTag: 'categories_fab',
         onPressed: () => _showCategoryDialog(context),
         child: const Icon(Icons.add),
       ),
