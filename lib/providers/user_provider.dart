@@ -1,6 +1,7 @@
-import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import '../models/models.dart';
 import '../services/database_service.dart';
+import '../core/theme.dart';
 
 /// Provider for managing user profile
 class UserProvider extends ChangeNotifier {
@@ -28,18 +29,18 @@ class UserProvider extends ChangeNotifier {
     String? name,
     String? photoPath,
     String? currency,
+    int? primaryColor,
     String? aiApiKey,
     String? aiModel,
-    String? aiProvider,
     String? aiCustomBaseUrl,
   }) async {
     _profile = _profile.copyWith(
       name: name ?? _profile.name,
       photoPath: photoPath ?? _profile.photoPath,
       currency: currency ?? _profile.currency,
+      primaryColor: primaryColor ?? _profile.primaryColor,
       aiApiKey: aiApiKey ?? _profile.aiApiKey,
       aiModel: aiModel ?? _profile.aiModel,
-      aiProvider: aiProvider ?? _profile.aiProvider,
       aiCustomBaseUrl: aiCustomBaseUrl ?? _profile.aiCustomBaseUrl,
     );
 

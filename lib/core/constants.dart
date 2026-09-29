@@ -29,112 +29,42 @@ class AppConstants {
   static const Duration animationDuration = Duration(milliseconds: 300);
   static const Duration splashDuration = Duration(seconds: 2);
 
-  // AI Chat
+  // AI Chat (OpenAI-Compatible Custom Endpoint)
   static const String chatMessagesBox = 'chat_messages';
   static const String aiApiKeyKey = 'ai_api_key';
   static const String aiModelKey = 'ai_model';
-  static const String aiProviderKey = 'ai_provider';
-  static const String defaultAiProvider = 'openrouter';
-  static const String defaultAiModel = 'google/gemini-2.0-flash-001';
+  static const String aiCustomBaseUrlKey = 'ai_custom_base_url';
+  static const String defaultAiBaseUrl = 'https://api.openai.com/v1';
+  static const String defaultAiModel = 'gpt-4o-mini';
 
-  // AI Providers
-  static const List<Map<String, String>> aiProviders = [
-    {
-      'id': 'openrouter',
-      'name': 'OpenRouter',
-      'baseUrl': 'https://openrouter.ai/api/v1/chat/completions',
-      'hint': 'Akses 100+ model AI dalam satu API key',
-      'website': 'https://openrouter.ai',
-    },
-    {
-      'id': 'openai',
-      'name': 'OpenAI',
-      'baseUrl': 'https://api.openai.com/v1/chat/completions',
-      'hint': 'GPT-5.5, GPT-5.4, GPT-5.4 Mini, dll.',
-      'website': 'https://platform.openai.com',
-    },
-    {
-      'id': 'anthropic',
-      'name': 'Anthropic',
-      'baseUrl': 'https://api.anthropic.com/v1/messages',
-      'hint': 'Claude Opus 4.7, Claude Sonnet 4.6, dll.',
-      'website': 'https://console.anthropic.com',
-    },
-    {
-      'id': 'custom',
-      'name': 'Custom (OpenAI-Compatible)',
-      'baseUrl': '',
-      'hint': 'DeepSeek, Groq, Together AI, atau server API custom lainnya',
-      'website': '',
-    },
-  ];
-
-  /// Get provider config by ID
-  static Map<String, String> getProviderConfig(String? providerId) {
-    return aiProviders.firstWhere(
-      (p) => p['id'] == providerId,
-      orElse: () => aiProviders.first,
-    );
-  }
-
-  /// Get base URL for a provider
-  static String getProviderBaseUrl(String? providerId,
-      {String? customBaseUrl}) {
-    if (providerId == 'custom' && customBaseUrl != null) {
-      String url = customBaseUrl.trimRight();
-      // Remove trailing slash
-      if (url.endsWith('/')) url = url.substring(0, url.length - 1);
-      // Auto-append /v1/chat/completions if user only entered base URL
-      if (!url.contains('/chat/completions')) {
-        url = '$url/v1/chat/completions';
-      }
-      return url;
+  /// Clean and format base URL (e.g., https://9router.mphstar.my.id/v1)
+  static String formatCleanBaseUrl(String? customBaseUrl) {
+    if (customBaseUrl == null || customBaseUrl.trim().isEmpty) {
+      return defaultAiBaseUrl;
     }
-    return getProviderConfig(providerId)['baseUrl']!;
+    String url = customBaseUrl.trim();
+    while (url.endsWith('/')) {
+      url = url.substring(0, url.length - 1);
+    }
+    // If user passed a specific endpoint path, strip it to get base v1
+    if (url.endsWith('/chat/completions')) {
+      url = url.replaceAll('/chat/completions', '');
+    } else if (url.endsWith('/models')) {
+      url = url.replaceAll('/models', '');
+    }
+    return url;
   }
 
-  // Available AI models per provider
-  static const Map<String, List<Map<String, String>>> providerModels = {
-    'openrouter': [
-      {'id': 'google/gemini-2.0-flash-001', 'name': 'Gemini 2.0 Flash'},
-      {'id': 'google/gemini-pro', 'name': 'Gemini Pro'},
-      {'id': 'anthropic/claude-sonnet-4-6', 'name': 'Claude Sonnet 4.6'},
-      {'id': 'anthropic/claude-opus-4-6', 'name': 'Claude Opus 4.6'},
-      {'id': 'openai/gpt-5.4', 'name': 'GPT-5.4'},
-      {'id': 'openai/gpt-5.4-mini', 'name': 'GPT-5.4 Mini'},
-      {'id': 'deepseek/deepseek-v4-flash', 'name': 'DeepSeek V4 Flash'},
-      {'id': 'deepseek/deepseek-v4-pro', 'name': 'DeepSeek V4 Pro'},
-      {'id': 'meta-llama/llama-3.1-8b-instruct', 'name': 'Llama 3.1 8B'},
-    ],
-    'openai': [
-      {'id': 'gpt-5.5', 'name': 'GPT-5.5'},
-      {'id': 'gpt-5.4', 'name': 'GPT-5.4'},
-      {'id': 'gpt-5.4-mini', 'name': 'GPT-5.4 Mini'},
-      {'id': 'gpt-5.4-nano', 'name': 'GPT-5.4 Nano'},
-    ],
-    'anthropic': [
-      {'id': 'claude-opus-4-7', 'name': 'Claude Opus 4.7'},
-      {'id': 'claude-opus-4-6', 'name': 'Claude Opus 4.6'},
-      {'id': 'claude-sonnet-4-6', 'name': 'Claude Sonnet 4.6'},
-    ],
-    'custom': [
-      {'id': 'deepseek-v4-flash', 'name': 'DeepSeek V4 Flash'},
-      {'id': 'deepseek-v4-pro', 'name': 'DeepSeek V4 Pro'},
-      {'id': 'deepseek-chat', 'name': 'DeepSeek Chat (Legacy)'},
-      {'id': 'deepseek-reasoner', 'name': 'DeepSeek Reasoner (Legacy)'},
-    ],
-  };
-
-  /// Get models for a specific provider
-  static List<Map<String, String>> getModelsForProvider(String? providerId) {
-    return providerModels[providerId ?? defaultAiProvider] ?? [];
+  /// Get Chat Completions URL from clean base URL
+  static String formatChatCompletionsUrl(String? customBaseUrl) {
+    final base = formatCleanBaseUrl(customBaseUrl);
+    return '$base/chat/completions';
   }
 
-  /// Get default model for a provider
-  static String getDefaultModelForProvider(String? providerId) {
-    final models = getModelsForProvider(providerId);
-    if (models.isNotEmpty) return models.first['id']!;
-    return defaultAiModel;
+  /// Get Models URL from clean base URL
+  static String formatModelsUrl(String? customBaseUrl) {
+    final base = formatCleanBaseUrl(customBaseUrl);
+    return '$base/models';
   }
 }
 

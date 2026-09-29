@@ -29,8 +29,8 @@ class CategoryProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Add a new category
-  Future<void> addCategory({
+  /// Add a new category and return created Category
+  Future<Category> addCategory({
     required String name,
     required String icon,
     required int color,
@@ -47,6 +47,7 @@ class CategoryProvider extends ChangeNotifier {
 
     await _db.saveCategory(category);
     await loadCategories();
+    return category;
   }
 
   /// Update an existing category

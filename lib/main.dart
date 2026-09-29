@@ -34,13 +34,19 @@ class MyDuitKuApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => UserProvider()),
         ChangeNotifierProvider(create: (_) => AiChatProvider()),
       ],
-      child: MaterialApp(
-        title: 'MyDuitKu',
-        debugShowCheckedModeBanner: false,
-        theme: AppTheme.lightTheme,
-        darkTheme: AppTheme.darkTheme,
-        themeMode: ThemeMode.system,
-        home: const SplashScreen(),
+      child: Consumer<UserProvider>(
+        builder: (context, userProvider, _) {
+          final customColor = Color(userProvider.profile.primaryColor);
+
+          return MaterialApp(
+            title: 'MyDuitKu',
+            debugShowCheckedModeBanner: false,
+            theme: AppTheme.getLightTheme(customColor),
+            darkTheme: AppTheme.getDarkTheme(customColor),
+            themeMode: ThemeMode.system,
+            home: const SplashScreen(),
+          );
+        },
       ),
     );
   }

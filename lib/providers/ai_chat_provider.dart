@@ -29,16 +29,18 @@ class AiChatProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Send message to AI
+  /// Send message to AI with optional image base64
   Future<void> sendMessage({
     required String message,
     required String apiKey,
     required String model,
-    required String provider,
+    String? imageBase64,
     String? customBaseUrl,
     Map<String, dynamic>? financialContext,
   }) async {
-    if (message.trim().isEmpty) return;
+    if (message.trim().isEmpty && (imageBase64 == null || imageBase64.isEmpty)) {
+      return;
+    }
 
     _isLoading = true;
     _error = null;
@@ -49,6 +51,7 @@ class AiChatProvider extends ChangeNotifier {
       id: _uuid.v4(),
       content: message,
       role: ChatRole.user,
+      imageBase64: imageBase64,
       timestamp: DateTime.now(),
     );
     _messages.add(userMessage);
@@ -57,18 +60,18 @@ class AiChatProvider extends ChangeNotifier {
 
     // Build message history for context (last 10 messages)
     final historyMessages = _messages
-        .where((m) => m.role != ChatRole.system)
+        .where((m) => m.role != ChatRole.system && m.id != userMessage.id)
         .take(10)
         .map((m) => {'role': m.role.name, 'content': m.content})
         .toList();
 
-    // Send to AI provider
+    // Send to OpenAI-compatible AI endpoint
     final response = await _aiService.sendMessage(
       apiKey: apiKey,
       model: model,
-      provider: provider,
+      imageBase64: imageBase64,
       customBaseUrl: customBaseUrl,
-      messages: historyMessages.cast<Map<String, String>>(),
+      messages: historyMessages,
       userMessage: message,
       financialContext: financialContext,
     );
@@ -189,15 +192,8 @@ class AiChatProvider extends ChangeNotifier {
   }
 
   /// Get model name from ID
-  String getModelName(String? modelId, {String? providerId}) {
-    if (modelId == null) return 'Default';
-    final models = AppConstants.getModelsForProvider(
-      providerId ?? AppConstants.defaultAiProvider,
-    );
-    final model = models.firstWhere(
-      (m) => m['id'] == modelId,
-      orElse: () => {'name': modelId},
-    );
-    return model['name'] ?? modelId;
+  String getModelName(String? modelId) {
+    if (modelId == null || modelId.trim().isEmpty) return AppConstants.defaultAiModel;
+    return modelId;
   }
 }

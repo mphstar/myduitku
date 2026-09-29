@@ -17,19 +17,32 @@ class AccountProvider extends ChangeNotifier {
   /// Get total balance across all accounts
   double get totalBalance => _accounts.fold(0, (sum, acc) => sum + acc.balance);
 
-  /// Load accounts from database
+  /// Load accounts from database (auto-create default Cash wallet if empty)
   Future<void> loadAccounts() async {
     _isLoading = true;
     notifyListeners();
 
     _accounts = _db.getAccounts();
 
+    if (_accounts.isEmpty) {
+      final defaultAccount = Account(
+        id: 'acc_cash_default',
+        name: 'Tunai / Cash',
+        type: AccountType.cash,
+        balance: 0,
+        icon: 'account_balance_wallet',
+        color: 0xFF00B8A9,
+      );
+      await _db.saveAccount(defaultAccount);
+      _accounts = [defaultAccount];
+    }
+
     _isLoading = false;
     notifyListeners();
   }
 
-  /// Add a new account
-  Future<void> addAccount({
+  /// Add a new account and return the created Account
+  Future<Account> addAccount({
     required String name,
     required AccountType type,
     required double balance,
@@ -41,12 +54,13 @@ class AccountProvider extends ChangeNotifier {
       name: name,
       type: type,
       balance: balance,
-      icon: icon,
-      color: color,
+      icon: icon ?? 'account_balance_wallet',
+      color: color ?? 0xFF00B8A9,
     );
 
     await _db.saveAccount(account);
     await loadAccounts();
+    return account;
   }
 
   /// Update an existing account

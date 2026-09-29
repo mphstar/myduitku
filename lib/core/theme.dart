@@ -3,41 +3,43 @@ import 'package:google_fonts/google_fonts.dart';
 
 /// App color palette
 class AppColors {
-  // Primary colors - Teal/Emerald gradient
-  static const Color primary = Color(0xFF00BFA6);
-  static const Color primaryDark = Color(0xFF00897B);
-  static const Color primaryLight = Color(0xFF64FFDA);
+  // Primary default color
+  static const Color primary = Color(0xFF00B8A9);
+  static const Color primaryDark = Color(0xFF008E82);
+  static const Color primaryLight = Color(0xFF4EE2D6);
 
   // Secondary colors
-  static const Color secondary = Color(0xFF26A69A);
-  static const Color accent = Color(0xFF1DE9B6);
+  static const Color secondary = Color(0xFF1B998B);
+  static const Color accent = Color(0xFF00D2C4);
 
-  // Background colors
-  static const Color background = Color(0xFFF5F7FA);
+  // Background colors - Clean modern cool gray
+  static const Color background = Color(0xFFF6F8FA);
   static const Color surface = Colors.white;
-  static const Color surfaceVariant = Color(0xFFF0F4F8);
+  static const Color surfaceVariant = Color(0xFFF0F3F6);
 
   // Dark theme colors
-  static const Color backgroundDark = Color(0xFF121212);
-  static const Color surfaceDark = Color(0xFF1E1E1E);
-  static const Color surfaceVariantDark = Color(0xFF2C2C2C);
+  static const Color backgroundDark = Color(0xFF11131A);
+  static const Color surfaceDark = Color(0xFF181B24);
+  static const Color surfaceVariantDark = Color(0xFF232733);
 
-  // Text colors
-  static const Color textPrimary = Color(0xFF1A1A2E);
-  static const Color textSecondary = Color(0xFF6B7280);
-  static const Color textHint = Color(0xFF9CA3AF);
-  static const Color textPrimaryDark = Color(0xFFE5E5E5);
-  static const Color textSecondaryDark = Color(0xFFB0B0B0);
+  // Text colors - Deep navy
+  static const Color textPrimary = Color(0xFF171A2B);
+  static const Color textSecondary = Color(0xFF6E7687);
+  static const Color textHint = Color(0xFF9EA7B8);
+  static const Color textPrimaryDark = Color(0xFFF0F3F8);
+  static const Color textSecondaryDark = Color(0xFF9FA7B8);
 
-  // Status colors
-  static const Color success = Color(0xFF4CAF50);
-  static const Color warning = Color(0xFFFF9800);
-  static const Color error = Color(0xFFE53935);
-  static const Color info = Color(0xFF2196F3);
+  // Status & Financial colors
+  static const Color success = Color(0xFF10B981);
+  static const Color warning = Color(0xFFF59E0B);
+  static const Color error = Color(0xFFEF4444);
+  static const Color info = Color(0xFF3B82F6);
 
-  // Income/Expense colors
-  static const Color income = Color(0xFF4CAF50);
-  static const Color expense = Color(0xFFE53935);
+  // Income/Expense semantic colors
+  static const Color income = Color(0xFF10B981);
+  static const Color incomeLight = Color(0xFFECFDF5);
+  static const Color expense = Color(0xFFEF4444);
+  static const Color expenseLight = Color(0xFFFEF2F2);
 
   // Chart colors
   static const List<Color> chartColors = [
@@ -52,17 +54,32 @@ class AppColors {
   ];
 }
 
+/// Preset theme colors for customization
+class AppThemePresets {
+  static const List<Map<String, dynamic>> presets = [
+    {'name': 'Teal Emerald (Default)', 'color': Color(0xFF00B8A9)},
+    {'name': 'Ocean Blue', 'color': Color(0xFF0284C7)},
+    {'name': 'Indigo Modern', 'color': Color(0xFF6366F1)},
+    {'name': 'Royal Purple', 'color': Color(0xFF8B5CF6)},
+    {'name': 'Sunset Rose', 'color': Color(0xFFF43F5E)},
+    {'name': 'Forest Green', 'color': Color(0xFF059669)},
+    {'name': 'Amber Gold', 'color': Color(0xFFD97706)},
+    {'name': 'Midnight Cyan', 'color': Color(0xFF0891B2)},
+  ];
+}
+
 /// App theme configuration
 class AppTheme {
-  static ThemeData get lightTheme {
+  static ThemeData getLightTheme([Color? primaryColor]) {
+    final primary = primaryColor ?? AppColors.primary;
     return ThemeData(
       useMaterial3: true,
       brightness: Brightness.light,
       colorScheme: ColorScheme.fromSeed(
-        seedColor: AppColors.primary,
+        seedColor: primary,
         brightness: Brightness.light,
-        primary: AppColors.primary,
-        secondary: AppColors.secondary,
+        primary: primary,
+        secondary: primary.withValues(alpha: 0.8),
         surface: AppColors.surface,
         error: AppColors.error,
       ),
@@ -91,7 +108,7 @@ class AppTheme {
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
-          backgroundColor: AppColors.primary,
+          backgroundColor: primary,
           foregroundColor: Colors.white,
           elevation: 0,
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
@@ -106,12 +123,12 @@ class AppTheme {
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
-          foregroundColor: AppColors.primary,
+          foregroundColor: primary,
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
           ),
-          side: const BorderSide(color: AppColors.primary),
+          side: BorderSide(color: primary),
           textStyle: GoogleFonts.poppins(
             fontSize: 16,
             fontWeight: FontWeight.w600,
@@ -131,7 +148,7 @@ class AppTheme {
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: AppColors.primary, width: 2),
+          borderSide: BorderSide(color: primary, width: 2),
         ),
         errorBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
@@ -143,14 +160,14 @@ class AppTheme {
         ),
         hintStyle: GoogleFonts.poppins(color: AppColors.textHint),
       ),
-      floatingActionButtonTheme: const FloatingActionButtonThemeData(
-        backgroundColor: AppColors.primary,
+      floatingActionButtonTheme: FloatingActionButtonThemeData(
+        backgroundColor: primary,
         foregroundColor: Colors.white,
         elevation: 4,
       ),
       bottomNavigationBarTheme: BottomNavigationBarThemeData(
         backgroundColor: AppColors.surface,
-        selectedItemColor: AppColors.primary,
+        selectedItemColor: primary,
         unselectedItemColor: AppColors.textSecondary,
         type: BottomNavigationBarType.fixed,
         elevation: 8,
@@ -160,6 +177,13 @@ class AppTheme {
         ),
         unselectedLabelStyle: GoogleFonts.poppins(fontSize: 12),
       ),
+      bottomSheetTheme: const BottomSheetThemeData(
+        backgroundColor: Colors.white,
+        surfaceTintColor: Colors.transparent,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+      ),
       dividerTheme: const DividerThemeData(
         color: AppColors.surfaceVariant,
         thickness: 1,
@@ -167,15 +191,16 @@ class AppTheme {
     );
   }
 
-  static ThemeData get darkTheme {
+  static ThemeData getDarkTheme([Color? primaryColor]) {
+    final primary = primaryColor ?? AppColors.primary;
     return ThemeData(
       useMaterial3: true,
       brightness: Brightness.dark,
       colorScheme: ColorScheme.fromSeed(
-        seedColor: AppColors.primary,
+        seedColor: primary,
         brightness: Brightness.dark,
-        primary: AppColors.primary,
-        secondary: AppColors.secondary,
+        primary: primary,
+        secondary: primary.withValues(alpha: 0.8),
         surface: AppColors.surfaceDark,
         error: AppColors.error,
       ),
@@ -204,7 +229,7 @@ class AppTheme {
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
-          backgroundColor: AppColors.primary,
+          backgroundColor: primary,
           foregroundColor: Colors.white,
           elevation: 0,
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
@@ -230,7 +255,7 @@ class AppTheme {
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: AppColors.primary, width: 2),
+          borderSide: BorderSide(color: primary, width: 2),
         ),
         contentPadding: const EdgeInsets.symmetric(
           horizontal: 16,
@@ -238,14 +263,14 @@ class AppTheme {
         ),
         hintStyle: GoogleFonts.poppins(color: AppColors.textSecondaryDark),
       ),
-      floatingActionButtonTheme: const FloatingActionButtonThemeData(
-        backgroundColor: AppColors.primary,
+      floatingActionButtonTheme: FloatingActionButtonThemeData(
+        backgroundColor: primary,
         foregroundColor: Colors.white,
         elevation: 4,
       ),
       bottomNavigationBarTheme: BottomNavigationBarThemeData(
         backgroundColor: AppColors.surfaceDark,
-        selectedItemColor: AppColors.primary,
+        selectedItemColor: primary,
         unselectedItemColor: AppColors.textSecondaryDark,
         type: BottomNavigationBarType.fixed,
         elevation: 8,
@@ -255,10 +280,20 @@ class AppTheme {
         ),
         unselectedLabelStyle: GoogleFonts.poppins(fontSize: 12),
       ),
+      bottomSheetTheme: const BottomSheetThemeData(
+        backgroundColor: AppColors.surfaceDark,
+        surfaceTintColor: Colors.transparent,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+      ),
       dividerTheme: const DividerThemeData(
         color: AppColors.surfaceVariantDark,
         thickness: 1,
       ),
     );
   }
+
+  static ThemeData get lightTheme => getLightTheme();
+  static ThemeData get darkTheme => getDarkTheme();
 }

@@ -1,4 +1,9 @@
+import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
 import '../../core/theme.dart';
 import '../../core/constants.dart';
@@ -6,6 +11,7 @@ import '../../models/models.dart';
 import '../../providers/providers.dart';
 import '../../widgets/common_widgets.dart';
 import '../profile/profile_screen.dart';
+import '../transactions/transactions_screen.dart';
 
 class AiChatScreen extends StatefulWidget {
   const AiChatScreen({super.key});
@@ -18,6 +24,10 @@ class _AiChatScreenState extends State<AiChatScreen> {
   final TextEditingController _messageController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   final FocusNode _focusNode = FocusNode();
+  final ImagePicker _imagePicker = ImagePicker();
+
+  String? _selectedImageBase64;
+  Uint8List? _selectedImageBytes;
 
   @override
   void initState() {
@@ -47,9 +57,119 @@ class _AiChatScreenState extends State<AiChatScreen> {
     }
   }
 
+  Future<void> _pickImage(ImageSource source) async {
+    try {
+      if (!kIsWeb &&
+          (defaultTargetPlatform == TargetPlatform.android ||
+              defaultTargetPlatform == TargetPlatform.iOS)) {
+        if (source == ImageSource.camera) {
+          final status = await Permission.camera.request();
+          if (status.isPermanentlyDenied) {
+            openAppSettings();
+            return;
+          }
+        }
+      }
+
+      final XFile? photo = await _imagePicker.pickImage(
+        source: source,
+        maxWidth: 1024,
+        maxHeight: 1024,
+        imageQuality: 80,
+      );
+
+      if (photo != null) {
+        final bytes = await photo.readAsBytes();
+        setState(() {
+          _selectedImageBytes = bytes;
+          _selectedImageBase64 = base64Encode(bytes);
+        });
+      }
+    } catch (_) {
+      try {
+        final result = await FilePicker.platform.pickFiles(
+          type: FileType.image,
+          withData: true,
+        );
+        if (result != null &&
+            result.files.isNotEmpty &&
+            result.files.first.bytes != null) {
+          final bytes = result.files.first.bytes!;
+          setState(() {
+            _selectedImageBytes = bytes;
+            _selectedImageBase64 = base64Encode(bytes);
+          });
+        }
+      } catch (_) {
+        if (mounted) {
+          SnackBarHelper.showError(context, 'Gagal memilih gambar.');
+        }
+      }
+    }
+  }
+
+  void _showImagePickerSheet() {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (sheetContext) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+              child: Text(
+                'Kirim Gambar / Struk',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+              ),
+            ),
+            const SizedBox(height: 8),
+            ListTile(
+              leading: Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withValues(alpha: 0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.camera_alt_rounded,
+                    color: AppColors.primary),
+              ),
+              title: const Text('Ambil Foto Kamera'),
+              onTap: () {
+                Navigator.pop(sheetContext);
+                _pickImage(ImageSource.camera);
+              },
+            ),
+            ListTile(
+              leading: Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: AppColors.secondary.withValues(alpha: 0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.photo_library_rounded,
+                    color: AppColors.secondary),
+              ),
+              title: const Text('Pilih dari Galeri / File'),
+              onTap: () {
+                Navigator.pop(sheetContext);
+                _pickImage(ImageSource.gallery);
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Future<void> _sendMessage() async {
     final message = _messageController.text.trim();
-    if (message.isEmpty) return;
+    final image = _selectedImageBase64;
+    if (message.isEmpty && image == null) return;
 
     final userProvider = context.read<UserProvider>();
     final aiChatProvider = context.read<AiChatProvider>();
@@ -63,6 +183,10 @@ class _AiChatScreenState extends State<AiChatScreen> {
     }
 
     _messageController.clear();
+    setState(() {
+      _selectedImageBase64 = null;
+      _selectedImageBytes = null;
+    });
     _focusNode.unfocus();
     _scrollToBottom();
 
@@ -76,7 +200,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
     final accountProvider = context.read<AccountProvider>();
 
     // Helper to format a transaction for AI context
-    Map<String, dynamic> _formatTx(transaction) {
+    Map<String, dynamic> formatTx(transaction) {
       final category = categoryProvider.getCategoryById(transaction.categoryId);
       final account = accountProvider.getAccountById(transaction.accountId);
       return {
@@ -103,7 +227,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
               ) &&
               t.date.isBefore(monthEnd.add(const Duration(days: 1))),
         )
-        .map(_formatTx)
+        .map(formatTx)
         .toList();
 
     // Get last month summary + transactions
@@ -115,7 +239,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
               ) &&
               t.date.isBefore(lastMonthEnd.add(const Duration(days: 1))),
         )
-        .map(_formatTx)
+        .map(formatTx)
         .toList();
 
     // Get account details
@@ -136,12 +260,6 @@ class _AiChatScreenState extends State<AiChatScreen> {
         monthStart,
         monthEnd,
       ),
-      'topExpenseCategories': _getTopExpenseCategories(
-        transactionProvider,
-        categoryProvider,
-        monthStart,
-        monthEnd,
-      ),
       'thisMonthTransactions': thisMonthTransactions,
       'lastMonthIncome': transactionProvider.getTotalIncomeForRange(
         lastMonthStart,
@@ -159,7 +277,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
       message: message,
       apiKey: userProvider.profile.aiApiKey!,
       model: userProvider.profile.aiModel ?? AppConstants.defaultAiModel,
-      provider: userProvider.profile.aiProvider ?? AppConstants.defaultAiProvider,
+      imageBase64: image,
       customBaseUrl: userProvider.profile.aiCustomBaseUrl,
       financialContext: financialContext,
     );
@@ -170,26 +288,6 @@ class _AiChatScreenState extends State<AiChatScreen> {
     if (aiChatProvider.hasPendingTransaction) {
       _showTransactionConfirmation(aiChatProvider.pendingTransaction!);
     }
-  }
-
-  List<Map<String, dynamic>> _getTopExpenseCategories(
-    TransactionProvider transactionProvider,
-    CategoryProvider categoryProvider,
-    DateTime start,
-    DateTime end,
-  ) {
-    final expenses = transactionProvider.getExpensesByCategory(
-      start: start,
-      end: end,
-    );
-
-    final sorted = expenses.entries.toList()
-      ..sort((a, b) => b.value.compareTo(a.value));
-
-    return sorted.take(5).map((e) {
-      final category = categoryProvider.getCategoryById(e.key);
-      return {'name': category?.name ?? 'Lainnya', 'amount': e.value};
-    }).toList();
   }
 
   void _showApiKeyDialog() {
@@ -225,106 +323,216 @@ class _AiChatScreenState extends State<AiChatScreen> {
     final categoryProvider = context.read<CategoryProvider>();
     final accountProvider = context.read<AccountProvider>();
 
-    // Get categories based on transaction type
     final categories = transaction.isIncome
         ? categoryProvider.incomeCategories
         : categoryProvider.expenseCategories;
 
-    // Validate accounts exist
-    if (accountProvider.accounts.isEmpty) {
-      SnackBarHelper.showError(
-        context,
-        'Tidak ada akun tersedia. Silakan buat akun terlebih dahulu.',
-      );
-      context.read<AiChatProvider>().rejectTransaction();
-      return;
+    // Check matching account (by accountName from AI or description)
+    String selectedAccountId = accountProvider.accounts.isNotEmpty
+        ? accountProvider.accounts.first.id
+        : '';
+    final targetAccountName = (transaction.accountName ?? transaction.description ?? '').toLowerCase();
+
+    for (final acc in accountProvider.accounts) {
+      if (targetAccountName.contains(acc.name.toLowerCase()) ||
+          acc.name.toLowerCase().contains(targetAccountName)) {
+        selectedAccountId = acc.id;
+        break;
+      }
     }
 
-    // Initial selections
-    String selectedAccountId = accountProvider.accounts.first.id;
     String selectedCategoryId = transaction.categoryId;
-
-    // Validate category exists, fallback to first if not found
     if (!categories.any((c) => c.id == selectedCategoryId)) {
       selectedCategoryId = categories.isNotEmpty ? categories.first.id : '';
     }
 
-    showDialog(
+    final isIncome = transaction.isIncome;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    showModalBottomSheet(
       context: context,
-      barrierDismissible: false,
-      builder: (dialogContext) => StatefulBuilder(
+      isScrollControlled: true,
+      backgroundColor: isDark ? const Color(0xFF1E222D) : Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (sheetContext) => StatefulBuilder(
         builder: (context, setState) {
-          final selectedCategory = categoryProvider.getCategoryById(
-            selectedCategoryId,
-          );
           final selectedAccount = accountProvider.accounts.firstWhere(
             (a) => a.id == selectedAccountId,
-            orElse: () => accountProvider.accounts.first,
+            orElse: () => accountProvider.accounts.isNotEmpty
+                ? accountProvider.accounts.first
+                : Account(
+                    id: '',
+                    name: 'Belum ada akun',
+                    type: AccountType.cash,
+                    balance: 0,
+                  ),
           );
 
-          return AlertDialog(
-            title: Row(
-              children: [
-                Icon(
-                  transaction.isIncome
-                      ? Icons.arrow_downward
-                      : Icons.arrow_upward,
-                  color: transaction.isIncome
-                      ? AppColors.success
-                      : AppColors.error,
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  transaction.isIncome
-                      ? 'Catat Pemasukan'
-                      : 'Catat Pengeluaran',
-                ),
-              ],
+          return Padding(
+            padding: EdgeInsets.fromLTRB(
+              20,
+              16,
+              20,
+              MediaQuery.of(context).viewInsets.bottom + 20,
             ),
-            content: SingleChildScrollView(
+            child: SingleChildScrollView(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Amount
-                  _buildConfirmationRow(
-                    'Jumlah',
-                    CurrencyFormatter.format(transaction.amount),
+                  // Drag handle
+                  Center(
+                    child: Container(
+                      width: 40,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade300,
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
                   ),
                   const SizedBox(height: 16),
 
-                  // Account Dropdown
-                  const Text(
-                    'Akun',
-                    style: TextStyle(fontWeight: FontWeight.w500, fontSize: 12),
+                  // Header Badge
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: (isIncome ? AppColors.success : AppColors.error)
+                                  .withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Icon(
+                              isIncome
+                                  ? Icons.arrow_downward_rounded
+                                  : Icons.arrow_upward_rounded,
+                              color: isIncome ? AppColors.success : AppColors.error,
+                              size: 18,
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Text(
+                            isIncome ? 'Konfirmasi Pemasukan' : 'Konfirmasi Pengeluaran',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16,
+                              color: AppColors.textPrimary,
+                            ),
+                          ),
+                        ],
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close_rounded, size: 20),
+                        onPressed: () async {
+                          Navigator.pop(sheetContext);
+                          await this.context.read<AiChatProvider>().rejectTransaction();
+                        },
+                      ),
+                    ],
                   ),
-                  const SizedBox(height: 4),
+                  const SizedBox(height: 14),
+
+                  // Amount Highlight Card
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                    decoration: BoxDecoration(
+                      color: (isIncome ? AppColors.success : AppColors.error)
+                          .withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                        color: (isIncome ? AppColors.success : AppColors.error)
+                            .withValues(alpha: 0.2),
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          'Jumlah Transaksi',
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: AppColors.textSecondary,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                        Text(
+                          CurrencyFormatter.format(transaction.amount),
+                          style: TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                            color: isIncome ? AppColors.success : AppColors.error,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Account Selector Header
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        'Rekening / Akun',
+                        style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                      ),
+                      TextButton.icon(
+                        onPressed: () async {
+                          final newAcc = await _showInlineAddAccount(context);
+                          if (newAcc != null) {
+                            setState(() {
+                              selectedAccountId = newAcc.id;
+                            });
+                          }
+                        },
+                        icon: const Icon(Icons.add_rounded, size: 14),
+                        label: const Text('Buat Akun Baru', style: TextStyle(fontSize: 12)),
+                        style: TextButton.styleFrom(
+                          foregroundColor: AppColors.primary,
+                          padding: EdgeInsets.zero,
+                          minimumSize: Size.zero,
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 12),
                     decoration: BoxDecoration(
                       border: Border.all(color: Colors.grey.shade300),
-                      borderRadius: BorderRadius.circular(8),
+                      borderRadius: BorderRadius.circular(12),
                     ),
                     child: DropdownButton<String>(
-                      value: selectedAccountId,
+                      value: accountProvider.accounts.any((a) => a.id == selectedAccountId)
+                          ? selectedAccountId
+                          : (accountProvider.accounts.isNotEmpty ? accountProvider.accounts.first.id : null),
                       isExpanded: true,
                       underline: const SizedBox(),
+                      hint: const Text('Pilih akun', style: TextStyle(fontSize: 13)),
                       items: accountProvider.accounts.map((account) {
                         return DropdownMenuItem<String>(
                           value: account.id,
                           child: Row(
                             children: [
                               Icon(
-                                AppIcons.getIcon(
-                                  account.icon ?? 'account_balance_wallet',
-                                ),
+                                AppIcons.getIcon(account.icon ?? 'account_balance_wallet'),
                                 size: 18,
-                                color: Color(account.color ?? 0xFF9E9E9E),
+                                color: Color(account.color ?? 0xFF00B8A9),
                               ),
                               const SizedBox(width: 8),
                               Expanded(
                                 child: Text(
-                                  account.name,
+                                  '${account.name} (${CurrencyFormatter.format(account.balance)})',
+                                  style: const TextStyle(fontSize: 13),
                                   overflow: TextOverflow.ellipsis,
                                 ),
                               ),
@@ -341,22 +549,52 @@ class _AiChatScreenState extends State<AiChatScreen> {
                   ),
                   const SizedBox(height: 16),
 
-                  // Category Dropdown
-                  const Text(
-                    'Kategori',
-                    style: TextStyle(fontWeight: FontWeight.w500, fontSize: 12),
+                  // Category Selector Header
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        'Kategori',
+                        style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                      ),
+                      TextButton.icon(
+                        onPressed: () async {
+                          final newCat = await TransactionsScreen.showInlineAddCategoryDialog(
+                            context,
+                            isIncome ? TransactionType.income : TransactionType.expense,
+                          );
+                          if (newCat != null) {
+                            setState(() {
+                              selectedCategoryId = newCat.id;
+                            });
+                          }
+                        },
+                        icon: const Icon(Icons.add_rounded, size: 14),
+                        label: const Text('Buat Kategori Baru', style: TextStyle(fontSize: 12)),
+                        style: TextButton.styleFrom(
+                          foregroundColor: AppColors.primary,
+                          padding: EdgeInsets.zero,
+                          minimumSize: Size.zero,
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        ),
+                      ),
+                    ],
                   ),
-                  const SizedBox(height: 4),
+                  const SizedBox(height: 6),
+
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 12),
                     decoration: BoxDecoration(
                       border: Border.all(color: Colors.grey.shade300),
-                      borderRadius: BorderRadius.circular(8),
+                      borderRadius: BorderRadius.circular(12),
                     ),
                     child: DropdownButton<String>(
-                      value: selectedCategoryId,
+                      value: categories.any((c) => c.id == selectedCategoryId)
+                          ? selectedCategoryId
+                          : (categories.isNotEmpty ? categories.first.id : null),
                       isExpanded: true,
                       underline: const SizedBox(),
+                      hint: const Text('Pilih kategori', style: TextStyle(fontSize: 13)),
                       items: categories.map((category) {
                         return DropdownMenuItem<String>(
                           value: category.id,
@@ -371,6 +609,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
                               Expanded(
                                 child: Text(
                                   category.name,
+                                  style: const TextStyle(fontSize: 13),
                                   overflow: TextOverflow.ellipsis,
                                 ),
                               ),
@@ -386,76 +625,174 @@ class _AiChatScreenState extends State<AiChatScreen> {
                     ),
                   ),
 
-                  // Description
-                  if (transaction.description != null) ...[
-                    const SizedBox(height: 16),
-                    _buildConfirmationRow(
-                      'Deskripsi',
-                      transaction.description!,
+                  // Description note
+                  if (transaction.description != null && transaction.description!.isNotEmpty) ...[
+                    const SizedBox(height: 14),
+                    Text(
+                      'Catatan: ${transaction.description}',
+                      style: TextStyle(
+                        color: AppColors.textSecondary,
+                        fontSize: 12,
+                        fontStyle: FontStyle.italic,
+                      ),
                     ),
                   ],
-                  const SizedBox(height: 16),
-                  Text(
-                    'Pastikan akun dan kategori sudah benar.',
-                    style: TextStyle(
-                      color: Colors.grey[600],
-                      fontStyle: FontStyle.italic,
-                      fontSize: 12,
-                    ),
+                  const SizedBox(height: 22),
+
+                  // Action Buttons
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: () async {
+                            Navigator.pop(sheetContext);
+                            await this.context.read<AiChatProvider>().rejectTransaction();
+                          },
+                          style: OutlinedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                          child: const Text('Batalkan'),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        flex: 2,
+                        child: ElevatedButton(
+                          onPressed: () async {
+                            final targetAccountId = selectedAccountId.isNotEmpty
+                                ? selectedAccountId
+                                : (accountProvider.accounts.isNotEmpty ? accountProvider.accounts.first.id : '');
+
+                            if (targetAccountId.isEmpty) {
+                              SnackBarHelper.showError(context, 'Pilih atau buat akun terlebih dahulu');
+                              return;
+                            }
+
+                            Navigator.pop(sheetContext);
+                            final success = await this.context
+                                .read<AiChatProvider>()
+                                .confirmTransaction(
+                                  transactionProvider:
+                                      this.context.read<TransactionProvider>(),
+                                  accountProvider: this.context.read<AccountProvider>(),
+                                  accountId: targetAccountId,
+                                  categoryId: selectedCategoryId,
+                                );
+                            if (success && mounted) {
+                              SnackBarHelper.showSuccess(
+                                this.context,
+                                'Transaksi berhasil dicatat ke ${selectedAccount.name}!',
+                              );
+                            }
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.primary,
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                          child: const Text('Konfirmasi & Simpan'),
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
             ),
-            actions: [
-              TextButton(
-                onPressed: () async {
-                  Navigator.pop(dialogContext);
-                  await this.context.read<AiChatProvider>().rejectTransaction();
-                },
-                child: const Text('Batal'),
-              ),
-              ElevatedButton(
-                onPressed: () async {
-                  Navigator.pop(dialogContext);
-                  final success = await this.context
-                      .read<AiChatProvider>()
-                      .confirmTransaction(
-                        transactionProvider: this.context
-                            .read<TransactionProvider>(),
-                        accountProvider: this.context.read<AccountProvider>(),
-                        accountId: selectedAccountId,
-                        categoryId: selectedCategoryId,
-                      );
-                  if (success && mounted) {
-                    SnackBarHelper.showSuccess(
-                      this.context,
-                      'Transaksi berhasil dicatat ke ${selectedAccount.name}!',
-                    );
-                  }
-                },
-                child: const Text('Ya, Catat'),
-              ),
-            ],
           );
         },
       ),
     );
   }
 
-  Widget _buildConfirmationRow(String label, String value) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        SizedBox(
-          width: 80,
-          child: Text(
-            label,
-            style: const TextStyle(fontWeight: FontWeight.w500),
+  Future<Account?> _showInlineAddAccount(BuildContext context) async {
+    final nameController = TextEditingController();
+    final balanceController = TextEditingController(text: '0');
+    AccountType selectedType = AccountType.bank;
+
+    return showModalBottomSheet<Account>(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (dialogCtx) => StatefulBuilder(
+        builder: (context, setState) => Padding(
+          padding: EdgeInsets.fromLTRB(
+            20,
+            20,
+            20,
+            MediaQuery.of(context).viewInsets.bottom + 20,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Tambah Akun / Rekening Baru',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+              ),
+              const SizedBox(height: 14),
+              TextField(
+                controller: nameController,
+                autofocus: true,
+                decoration: const InputDecoration(
+                  labelText: 'Nama Akun',
+                  hintText: 'Contoh: BCA, Mandiri, Cash, QRIS',
+                ),
+                textCapitalization: TextCapitalization.words,
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: balanceController,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(
+                  labelText: 'Saldo Awal',
+                  prefixText: 'Rp ',
+                ),
+              ),
+              const SizedBox(height: 18),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () async {
+                    final name = nameController.text.trim();
+                    if (name.isEmpty) {
+                      SnackBarHelper.showError(context, 'Nama akun harus diisi');
+                      return;
+                    }
+                    final balance = double.tryParse(
+                          balanceController.text.replaceAll(RegExp(r'[^0-9]'), ''),
+                        ) ??
+                        0;
+
+                    final acc = await context.read<AccountProvider>().addAccount(
+                          name: name,
+                          type: selectedType,
+                          balance: balance,
+                          icon: 'account_balance_wallet',
+                          color: 0xFF00B8A9,
+                        );
+
+                    if (dialogCtx.mounted) {
+                      Navigator.pop(dialogCtx, acc);
+                      SnackBarHelper.showSuccess(
+                        context,
+                        'Akun "$name" berhasil dibuat',
+                      );
+                    }
+                  },
+                  child: const Text('Simpan Akun'),
+                ),
+              ),
+            ],
           ),
         ),
-        const Text(': '),
-        Expanded(child: Text(value)),
-      ],
+      ),
     );
   }
 
@@ -463,29 +800,39 @@ class _AiChatScreenState extends State<AiChatScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('DuitAI'),
+        title: Consumer<UserProvider>(
+          builder: (context, userProvider, _) {
+            final model = userProvider.profile.aiModel ?? 'DuitAI';
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                const Text('DuitAI Assistant'),
+                Text(
+                  model,
+                  style: const TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.normal,
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+              ],
+            );
+          },
+        ),
         actions: [
           IconButton(
             icon: const Icon(Icons.delete_outline),
+            tooltip: 'Hapus Chat',
             onPressed: () async {
               final confirm = await DialogHelper.showConfirmation(
                 context,
-                title: 'Hapus Riwayat?',
-                message: 'Semua riwayat chat akan dihapus.',
+                title: 'Hapus Chat?',
+                message: 'Semua riwayat percakapan akan dihapus.',
                 isDestructive: true,
               );
-              if (confirm && mounted) {
+              if (confirm && context.mounted) {
                 await context.read<AiChatProvider>().clearChat();
               }
-            },
-          ),
-          IconButton(
-            icon: const Icon(Icons.settings_outlined),
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => const ProfileScreen()),
-              );
             },
           ),
         ],
@@ -498,31 +845,6 @@ class _AiChatScreenState extends State<AiChatScreen> {
 
           return Column(
             children: [
-              // Error banner
-              if (aiChat.error != null)
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(12),
-                  color: AppColors.error.withOpacity(0.1),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.error_outline, color: AppColors.error),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          aiChat.error!,
-                          style: const TextStyle(color: AppColors.error),
-                        ),
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.close, color: AppColors.error),
-                        iconSize: 18,
-                        onPressed: () => aiChat.clearError(),
-                      ),
-                    ],
-                  ),
-                ),
-
               // Messages list
               Expanded(
                 child: ListView.builder(
@@ -561,7 +883,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
                   Container(
                     padding: const EdgeInsets.all(20),
                     decoration: BoxDecoration(
-                      color: AppColors.primary.withOpacity(0.1),
+                      color: AppColors.primary.withValues(alpha: 0.1),
                       shape: BoxShape.circle,
                     ),
                     child: const Icon(
@@ -577,7 +899,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'Asisten keuangan pribadi Anda.\nCatat pemasukan dan pengeluaran dengan mudah!',
+                    'Asisten keuangan pribadi Anda.\nKirim teks atau foto struk untuk mencatat otomatis!',
                     textAlign: TextAlign.center,
                     style: TextStyle(color: Colors.grey[600], fontSize: 16),
                   ),
@@ -587,9 +909,9 @@ class _AiChatScreenState extends State<AiChatScreen> {
                     runSpacing: 8,
                     alignment: WrapAlignment.center,
                     children: [
-                      _buildSuggestionChip('Beli makan 50rb'),
+                      _buildSuggestionChip('Beli makan 50rb BCA'),
                       _buildSuggestionChip('Gajian 5 juta'),
-                      _buildSuggestionChip('Analisa pengeluaran'),
+                      _buildSuggestionChip('Analisa pengeluaran bulan ini'),
                     ],
                   ),
                 ],
@@ -614,17 +936,18 @@ class _AiChatScreenState extends State<AiChatScreen> {
 
   Widget _buildMessageBubble(ChatMessage message) {
     final isUser = message.role == ChatRole.user;
+    final primaryColor = Theme.of(context).primaryColor;
+
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: Row(
-        mainAxisAlignment: isUser
-            ? MainAxisAlignment.end
-            : MainAxisAlignment.start,
+        mainAxisAlignment:
+            isUser ? MainAxisAlignment.end : MainAxisAlignment.start,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           if (!isUser) ...[
             CircleAvatar(
-              backgroundColor: AppColors.primary,
+              backgroundColor: primaryColor,
               radius: 16,
               child: const Icon(Icons.smart_toy, size: 18, color: Colors.white),
             ),
@@ -634,7 +957,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               decoration: BoxDecoration(
-                color: isUser ? AppColors.primary : Colors.grey[200],
+                color: isUser ? primaryColor : Colors.grey[200],
                 borderRadius: BorderRadius.only(
                   topLeft: const Radius.circular(16),
                   topRight: const Radius.circular(16),
@@ -642,9 +965,30 @@ class _AiChatScreenState extends State<AiChatScreen> {
                   bottomRight: Radius.circular(isUser ? 4 : 16),
                 ),
               ),
-              child: Text(
-                message.content,
-                style: TextStyle(color: isUser ? Colors.white : Colors.black87),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (message.imageBase64 != null &&
+                      message.imageBase64!.isNotEmpty) ...[
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(10),
+                      child: Image.memory(
+                        base64Decode(message.imageBase64!),
+                        width: 180,
+                        height: 180,
+                        fit: BoxFit.cover,
+                      ),
+                    ),
+                    if (message.content.isNotEmpty) const SizedBox(height: 8),
+                  ],
+                  if (message.content.isNotEmpty)
+                    Text(
+                      message.content,
+                      style: TextStyle(
+                        color: isUser ? Colors.white : Colors.black87,
+                      ),
+                    ),
+                ],
               ),
             ),
           ),
@@ -666,10 +1010,10 @@ class _AiChatScreenState extends State<AiChatScreen> {
       padding: const EdgeInsets.only(bottom: 12),
       child: Row(
         children: [
-          CircleAvatar(
+          const CircleAvatar(
             backgroundColor: AppColors.primary,
             radius: 16,
-            child: const Icon(Icons.smart_toy, size: 18, color: Colors.white),
+            child: Icon(Icons.smart_toy, size: 18, color: Colors.white),
           ),
           const SizedBox(width: 8),
           Container(
@@ -719,60 +1063,112 @@ class _AiChatScreenState extends State<AiChatScreen> {
   Widget _buildInputField() {
     return Container(
       padding: EdgeInsets.only(
-        left: 16,
-        right: 16,
-        top: 12,
-        bottom: MediaQuery.of(context).padding.bottom + 12,
+        left: 12,
+        right: 12,
+        top: 8,
+        bottom: MediaQuery.of(context).padding.bottom + 8,
       ),
       decoration: BoxDecoration(
         color: Theme.of(context).cardColor,
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 10,
             offset: const Offset(0, -2),
           ),
         ],
       ),
-      child: Row(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Expanded(
-            child: TextField(
-              controller: _messageController,
-              focusNode: _focusNode,
-              decoration: InputDecoration(
-                hintText: 'Ketik pesan...',
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(24),
-                  borderSide: BorderSide.none,
-                ),
-                filled: true,
-                fillColor: Colors.grey[100],
-                contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 20,
-                  vertical: 12,
+          // Image Preview thumbnail before sending
+          if (_selectedImageBytes != null)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Row(
+                children: [
+                  Stack(
+                    children: [
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(10),
+                        child: Image.memory(
+                          _selectedImageBytes!,
+                          width: 60,
+                          height: 60,
+                          fit: BoxFit.cover,
+                        ),
+                      ),
+                      Positioned(
+                        top: 2,
+                        right: 2,
+                        child: GestureDetector(
+                          onTap: () {
+                            setState(() {
+                              _selectedImageBase64 = null;
+                              _selectedImageBytes = null;
+                            });
+                          },
+                          child: Container(
+                            decoration: const BoxDecoration(
+                              color: Colors.black54,
+                              shape: BoxShape.circle,
+                            ),
+                            padding: const EdgeInsets.all(2),
+                            child: const Icon(Icons.close,
+                                size: 14, color: Colors.white),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(width: 8),
+                  const Expanded(
+                    child: Text(
+                      'Foto struk/gambar siap dikirim ke AI',
+                      style: TextStyle(fontSize: 12, color: Colors.grey),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          Row(
+            children: [
+              // Media button (Camera / Gallery / Files)
+              IconButton(
+                icon: Icon(Icons.camera_alt_outlined,
+                    color: Theme.of(context).primaryColor),
+                onPressed: _showImagePickerSheet,
+                tooltip: 'Kirim Struk / Gambar',
+              ),
+              Expanded(
+                child: TextField(
+                  controller: _messageController,
+                  focusNode: _focusNode,
+                  decoration: InputDecoration(
+                    hintText: _selectedImageBytes != null
+                        ? 'Tambah catatan (opsional)...'
+                        : 'Ketik pesan transaksi...',
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(24),
+                      borderSide: BorderSide.none,
+                    ),
+                    filled: true,
+                    fillColor: Colors.grey[100],
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 10,
+                    ),
+                  ),
+                  textInputAction: TextInputAction.send,
+                  onSubmitted: (_) => _sendMessage(),
                 ),
               ),
-              textInputAction: TextInputAction.send,
-              onSubmitted: (_) => _sendMessage(),
-            ),
-          ),
-          const SizedBox(width: 8),
-          Consumer<AiChatProvider>(
-            builder: (context, aiChat, _) {
-              return FloatingActionButton(
-                heroTag: 'ai_chat_fab',
-                onPressed: aiChat.isLoading ? null : _sendMessage,
-                mini: true,
-                child: aiChat.isLoading
-                    ? const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.send),
-              );
-            },
+              const SizedBox(width: 6),
+              IconButton(
+                icon: Icon(Icons.send_rounded, color: Theme.of(context).primaryColor),
+                onPressed: _sendMessage,
+              ),
+            ],
           ),
         ],
       ),

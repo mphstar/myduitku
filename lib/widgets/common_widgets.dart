@@ -251,72 +251,269 @@ class LoadingWidget extends StatelessWidget {
   }
 }
 
-/// Custom snackbar helper
+/// Custom toast / notification banner helper that always renders on top of bottom sheets & dialogs
 class SnackBarHelper {
   static void showSuccess(BuildContext context, String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Row(
-          children: [
-            const Icon(Icons.check_circle, color: Colors.white),
-            const SizedBox(width: 8),
-            Expanded(child: Text(message)),
-          ],
-        ),
-        backgroundColor: AppColors.success,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-      ),
+    _showCustomToast(
+      context,
+      title: 'Berhasil',
+      message: message,
+      icon: Icons.check_circle_rounded,
+      accentColor: const Color(0xFF10B981),
+      iconBgColor: const Color(0xFFECFDF5),
     );
   }
 
   static void showError(BuildContext context, String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Row(
-          children: [
-            const Icon(Icons.error, color: Colors.white),
-            const SizedBox(width: 8),
-            Expanded(child: Text(message)),
-          ],
-        ),
-        backgroundColor: AppColors.error,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-      ),
+    _showCustomToast(
+      context,
+      title: 'Pemberitahuan',
+      message: message,
+      icon: Icons.error_rounded,
+      accentColor: const Color(0xFFEF4444),
+      iconBgColor: const Color(0xFFFEF2F2),
     );
   }
 
   static void showWarning(BuildContext context, String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Row(
-          children: [
-            const Icon(Icons.warning, color: Colors.white),
-            const SizedBox(width: 8),
-            Expanded(child: Text(message)),
-          ],
-        ),
-        backgroundColor: AppColors.warning,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-      ),
+    _showCustomToast(
+      context,
+      title: 'Peringatan',
+      message: message,
+      icon: Icons.warning_rounded,
+      accentColor: const Color(0xFFF59E0B),
+      iconBgColor: const Color(0xFFFFFBEB),
     );
   }
 
   static void showInfo(BuildContext context, String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Row(
-          children: [
-            const Icon(Icons.info_outline, color: Colors.white),
-            const SizedBox(width: 8),
-            Expanded(child: Text(message)),
-          ],
+    _showCustomToast(
+      context,
+      title: 'Informasi',
+      message: message,
+      icon: Icons.info_rounded,
+      accentColor: AppColors.primary,
+      iconBgColor: const Color(0xFFE6FAF8),
+    );
+  }
+
+  static void _showCustomToast(
+    BuildContext context, {
+    required String title,
+    required String message,
+    required IconData icon,
+    required Color accentColor,
+    required Color iconBgColor,
+  }) {
+    final overlay = Overlay.maybeOf(context, rootOverlay: true);
+    if (overlay == null) return;
+
+    late OverlayEntry entry;
+    entry = OverlayEntry(
+      builder: (context) => _TopToastWidget(
+        title: title,
+        message: message,
+        icon: icon,
+        accentColor: accentColor,
+        iconBgColor: iconBgColor,
+        onDismiss: () {
+          if (entry.mounted) {
+            entry.remove();
+          }
+        },
+      ),
+    );
+
+    overlay.insert(entry);
+  }
+}
+
+class _TopToastWidget extends StatefulWidget {
+  final String title;
+  final String message;
+  final IconData icon;
+  final Color accentColor;
+  final Color iconBgColor;
+  final VoidCallback onDismiss;
+
+  const _TopToastWidget({
+    required this.title,
+    required this.message,
+    required this.icon,
+    required this.accentColor,
+    required this.iconBgColor,
+    required this.onDismiss,
+  });
+
+  @override
+  State<_TopToastWidget> createState() => _TopToastWidgetState();
+}
+
+class _TopToastWidgetState extends State<_TopToastWidget>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<double> _fadeAnimation;
+  late Animation<Offset> _slideAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 320),
+    );
+
+    _fadeAnimation = CurvedAnimation(
+      parent: _controller,
+      curve: Curves.easeOutCubic,
+    );
+
+    _slideAnimation = Tween<Offset>(
+      begin: const Offset(0, -0.4),
+      end: Offset.zero,
+    ).animate(CurvedAnimation(
+      parent: _controller,
+      curve: Curves.easeOutBack,
+    ));
+
+    _controller.forward();
+
+    // Auto-dismiss after 3.2 seconds
+    Future.delayed(const Duration(milliseconds: 3200), () {
+      if (mounted) {
+        _controller.reverse().then((_) {
+          widget.onDismiss();
+        });
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final topPadding = MediaQuery.of(context).padding.top;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return Positioned(
+      top: topPadding + 10,
+      left: 16,
+      right: 16,
+      child: Material(
+        color: Colors.transparent,
+        child: SlideTransition(
+          position: _slideAnimation,
+          child: FadeTransition(
+            opacity: _fadeAnimation,
+            child: GestureDetector(
+              onTap: () {
+                _controller.reverse().then((_) => widget.onDismiss());
+              },
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                decoration: BoxDecoration(
+                  color: isDark ? const Color(0xFF1E222D) : Colors.white,
+                  borderRadius: BorderRadius.circular(18),
+                  border: Border.all(
+                    color: isDark
+                        ? widget.accentColor.withValues(alpha: 0.3)
+                        : widget.accentColor.withValues(alpha: 0.25),
+                    width: 1.2,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.08),
+                      blurRadius: 24,
+                      spreadRadius: 0,
+                      offset: const Offset(0, 10),
+                    ),
+                    BoxShadow(
+                      color: widget.accentColor.withValues(alpha: 0.12),
+                      blurRadius: 16,
+                      spreadRadius: -4,
+                      offset: const Offset(0, 6),
+                    ),
+                  ],
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    // Accent Indicator & Icon Container
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: isDark
+                            ? widget.accentColor.withValues(alpha: 0.18)
+                            : widget.iconBgColor,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Icon(
+                        widget.icon,
+                        color: widget.accentColor,
+                        size: 20,
+                      ),
+                    ),
+                    const SizedBox(width: 14),
+                    // Message content
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            widget.title,
+                            style: TextStyle(
+                              color: isDark
+                                  ? Colors.white
+                                  : const Color(0xFF171A2B),
+                              fontSize: 13,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: -0.2,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            widget.message,
+                            style: TextStyle(
+                              color: isDark
+                                  ? const Color(0xFF9EABB9)
+                                  : const Color(0xFF64748B),
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
+                              height: 1.25,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    // Close button icon
+                    Container(
+                      padding: const EdgeInsets.all(4),
+                      decoration: BoxDecoration(
+                        color: isDark
+                            ? Colors.white.withValues(alpha: 0.06)
+                            : Colors.black.withValues(alpha: 0.04),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(
+                        Icons.close_rounded,
+                        color: isDark
+                            ? const Color(0xFF8E9BAA)
+                            : const Color(0xFF94A3B8),
+                        size: 14,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
         ),
-        backgroundColor: AppColors.primary,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
       ),
     );
   }

@@ -35,6 +35,8 @@ class _CategoriesScreenState extends State<CategoriesScreen>
 
   @override
   Widget build(BuildContext context) {
+    final primaryColor = Theme.of(context).primaryColor;
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Kelola Kategori'),
@@ -44,9 +46,9 @@ class _CategoriesScreenState extends State<CategoriesScreen>
             Tab(text: 'Pengeluaran'),
             Tab(text: 'Pemasukan'),
           ],
-          labelColor: AppColors.primary,
+          labelColor: primaryColor,
           unselectedLabelColor: AppColors.textSecondary,
-          indicatorColor: AppColors.primary,
+          indicatorColor: primaryColor,
         ),
       ),
       body: Consumer<CategoryProvider>(
@@ -181,8 +183,9 @@ class _CategoriesScreenState extends State<CategoriesScreen>
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
+      backgroundColor: Colors.white,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
       builder: (context) => StatefulBuilder(
         builder: (context, setState) => Padding(

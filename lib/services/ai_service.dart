@@ -4,8 +4,7 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 import '../core/constants.dart';
 import '../models/models.dart';
 
-/// Service for communicating with multiple AI provider APIs
-/// Supports OpenRouter, OpenAI, Anthropic, and custom OpenAI-compatible APIs (DeepSeek, Groq, etc.)
+/// Service for communicating with any OpenAI-Compatible API (OpenAI, Local LLM, Groq, DeepSeek, OpenRouter, Ollama, etc.)
 class AiService {
   static final AiService _instance = AiService._internal();
   factory AiService() => _instance;
@@ -15,17 +14,84 @@ class AiService {
 
   /// Check if device has internet connection
   Future<bool> hasInternetConnection() async {
-    final result = await _connectivity.checkConnectivity();
-    return !result.contains(ConnectivityResult.none);
+    try {
+      final result = await _connectivity.checkConnectivity();
+      return !result.contains(ConnectivityResult.none);
+    } catch (_) {
+      // If connectivity check fails (e.g. on web or platform limitation), allow request to proceed
+      return true;
+    }
   }
 
-  /// Send message to AI provider and get response
+  /// Fetch available models list from OpenAI-compatible /models endpoint
+  Future<List<String>> fetchModels({
+    required String apiKey,
+    String? customBaseUrl,
+  }) async {
+    try {
+      final modelsUrl = AppConstants.formatModelsUrl(customBaseUrl);
+      final headers = <String, String>{
+        'Content-Type': 'application/json',
+        if (apiKey.trim().isNotEmpty) 'Authorization': 'Bearer ${apiKey.trim()}',
+      };
+
+      final response = await http
+          .get(Uri.parse(modelsUrl), headers: headers)
+          .timeout(const Duration(seconds: 15));
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final modelIds = <String>[];
+
+        // Format 1: { "data": [ { "id": "model-name" } ] }
+        if (data is Map && data.containsKey('data') && data['data'] is List) {
+          for (final item in data['data'] as List) {
+            if (item is Map && item.containsKey('id')) {
+              modelIds.add(item['id'].toString());
+            } else if (item is String) {
+              modelIds.add(item);
+            }
+          }
+        }
+        // Format 2: { "models": [ ... ] } (e.g. Ollama/custom proxy)
+        else if (data is Map && data.containsKey('models') && data['models'] is List) {
+          for (final item in data['models'] as List) {
+            if (item is Map && item.containsKey('name')) {
+              modelIds.add(item['name'].toString());
+            } else if (item is Map && item.containsKey('id')) {
+              modelIds.add(item['id'].toString());
+            } else if (item is String) {
+              modelIds.add(item);
+            }
+          }
+        }
+        // Format 3: [ { "id": "..." } ]
+        else if (data is List) {
+          for (final item in data) {
+            if (item is Map && item.containsKey('id')) {
+              modelIds.add(item['id'].toString());
+            } else if (item is String) {
+              modelIds.add(item);
+            }
+          }
+        }
+
+        modelIds.sort();
+        return modelIds;
+      }
+      return [];
+    } catch (_) {
+      return [];
+    }
+  }
+
+  /// Send message to OpenAI-compatible AI endpoint (supports text + optional image)
   Future<AiResponse> sendMessage({
     required String apiKey,
     required String model,
-    required String provider,
-    required List<Map<String, String>> messages,
+    required List<Map<String, dynamic>> messages,
     required String userMessage,
+    String? imageBase64,
     String? customBaseUrl,
     Map<String, dynamic>? financialContext,
   }) async {
@@ -38,131 +104,79 @@ class AiService {
     }
 
     try {
-      // Build system prompt with financial context
       final systemPrompt = _buildSystemPrompt(financialContext);
+      final endpointUrl = AppConstants.formatChatCompletionsUrl(customBaseUrl);
 
-      // Route to the correct handler based on provider
-      if (provider == 'anthropic') {
-        return _sendAnthropicMessage(
-          apiKey: apiKey,
-          model: model,
-          systemPrompt: systemPrompt,
-          messages: messages,
-          userMessage: userMessage,
-        );
+      // Build user message content (either String or Multi-modal array)
+      dynamic userContent;
+      if (imageBase64 != null && imageBase64.isNotEmpty) {
+        userContent = [
+          {
+            'type': 'text',
+            'text': userMessage.isEmpty
+                ? 'Tolong analisa struk / gambar ini dan catat transaksinya jika ada.'
+                : userMessage,
+          },
+          {
+            'type': 'image_url',
+            'image_url': {
+              'url': imageBase64.startsWith('data:')
+                  ? imageBase64
+                  : 'data:image/jpeg;base64,$imageBase64',
+            },
+          },
+        ];
       } else {
-        return _sendOpenAiCompatibleMessage(
-          apiKey: apiKey,
-          model: model,
-          provider: provider,
-          systemPrompt: systemPrompt,
-          messages: messages,
-          userMessage: userMessage,
-          customBaseUrl: customBaseUrl,
+        userContent = userMessage;
+      }
+
+      // Build messages list
+      final apiMessages = <Map<String, dynamic>>[
+        {'role': 'system', 'content': systemPrompt},
+        ...messages,
+        {'role': 'user', 'content': userContent},
+      ];
+
+      final headers = <String, String>{
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        if (apiKey.trim().isNotEmpty) 'Authorization': 'Bearer ${apiKey.trim()}',
+      };
+
+      final bodyMap = {
+        'model': model.trim().isEmpty ? AppConstants.defaultAiModel : model.trim(),
+        'messages': apiMessages,
+      };
+
+      final client = http.Client();
+      final response = await client
+          .post(
+            Uri.parse(endpointUrl),
+            headers: headers,
+            body: jsonEncode(bodyMap),
+          )
+          .timeout(
+            const Duration(seconds: 40),
+            onTimeout: () {
+              throw Exception('Timeout: Server AI tidak merespons dalam 40 detik');
+            },
+          );
+
+      return _handleOpenAiResponse(response);
+    } catch (e) {
+      final errorMsg = e.toString();
+      if (errorMsg.contains('Failed to fetch') || errorMsg.contains('ClientException')) {
+        return AiResponse(
+          success: false,
+          error:
+              'Gagal terhubung ke server AI (Failed to fetch). Pastikan server backend Anda mengizinkan CORS (Cross-Origin Resource Sharing) atau periksa koneksi internet / domain endpoint.',
         );
       }
-    } catch (e) {
       return AiResponse(
         success: false,
-        error: 'Terjadi kesalahan: ${e.toString()}',
+        error: 'Terjadi kesalahan: $errorMsg',
       );
     }
-  }
-
-  /// Send message to OpenAI-compatible APIs (OpenRouter, OpenAI, Custom/DeepSeek, etc.)
-  Future<AiResponse> _sendOpenAiCompatibleMessage({
-    required String apiKey,
-    required String model,
-    required String provider,
-    required String systemPrompt,
-    required List<Map<String, String>> messages,
-    required String userMessage,
-    String? customBaseUrl,
-  }) async {
-    final baseUrl = AppConstants.getProviderBaseUrl(
-      provider,
-      customBaseUrl: customBaseUrl,
-    );
-
-    // Build messages list
-    final apiMessages = <Map<String, String>>[
-      {'role': 'system', 'content': systemPrompt},
-      ...messages,
-      {'role': 'user', 'content': userMessage},
-    ];
-
-    // Build headers based on provider
-    final headers = <String, String>{
-      'Content-Type': 'application/json',
-      'Authorization': 'Bearer $apiKey',
-    };
-
-    // OpenRouter-specific headers
-    if (provider == 'openrouter') {
-      headers['HTTP-Referer'] = 'https://myduitku.app';
-      headers['X-Title'] = 'MyDuitKu';
-    }
-
-    final response = await http
-        .post(
-          Uri.parse(baseUrl),
-          headers: headers,
-          body: jsonEncode({'model': model, 'messages': apiMessages}),
-        )
-        .timeout(
-          const Duration(seconds: 30),
-          onTimeout: () {
-            throw Exception('Timeout: Server tidak merespons');
-          },
-        );
-
-    return _handleOpenAiResponse(response);
-  }
-
-  /// Send message to Anthropic API (different format)
-  Future<AiResponse> _sendAnthropicMessage({
-    required String apiKey,
-    required String model,
-    required String systemPrompt,
-    required List<Map<String, String>> messages,
-    required String userMessage,
-  }) async {
-    final baseUrl = AppConstants.getProviderBaseUrl('anthropic');
-
-    // Build Anthropic-format messages (no 'system' role in messages array)
-    final apiMessages = <Map<String, dynamic>>[
-      ...messages.map((m) => {
-            'role': m['role'] == 'assistant' ? 'assistant' : 'user',
-            'content': m['content'],
-          }),
-      {'role': 'user', 'content': userMessage},
-    ];
-
-    final headers = <String, String>{
-      'Content-Type': 'application/json',
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
-    };
-
-    final response = await http
-        .post(
-          Uri.parse(baseUrl),
-          headers: headers,
-          body: jsonEncode({
-            'model': model,
-            'max_tokens': 4096,
-            'system': systemPrompt,
-            'messages': apiMessages,
-          }),
-        )
-        .timeout(
-          const Duration(seconds: 30),
-          onTimeout: () {
-            throw Exception('Timeout: Server tidak merespons');
-          },
-        );
-
-    return _handleAnthropicResponse(response);
   }
 
   /// Handle OpenAI-compatible API response
@@ -170,6 +184,7 @@ class AiService {
     if (response.statusCode == 200) {
       final data = jsonDecode(response.body);
       final content = data['choices'][0]['message']['content'] as String;
+
       final pendingTransaction = _parseTransactionFromResponse(content);
 
       return AiResponse(
@@ -177,61 +192,33 @@ class AiService {
         content: content,
         pendingTransaction: pendingTransaction,
       );
-    } else {
-      return _handleErrorResponse(response);
-    }
-  }
-
-  /// Handle Anthropic API response (different format)
-  AiResponse _handleAnthropicResponse(http.Response response) {
-    if (response.statusCode == 200) {
-      final data = jsonDecode(response.body);
-      // Anthropic returns content as array of blocks
-      final contentBlocks = data['content'] as List;
-      final textBlock = contentBlocks.firstWhere(
-        (block) => block['type'] == 'text',
-        orElse: () => {'text': ''},
-      );
-      final content = textBlock['text'] as String;
-      final pendingTransaction = _parseTransactionFromResponse(content);
-
-      return AiResponse(
-        success: true,
-        content: content,
-        pendingTransaction: pendingTransaction,
-      );
-    } else {
-      return _handleErrorResponse(response);
-    }
-  }
-
-  /// Handle error responses (shared between providers)
-  AiResponse _handleErrorResponse(http.Response response) {
-    if (response.statusCode == 401) {
+    } else if (response.statusCode == 401) {
       return AiResponse(
         success: false,
-        error:
-            'API Key tidak valid. Silakan periksa API Key Anda di Pengaturan.',
+        error: 'API Key tidak valid atau tidak memiliki izin akses.',
+      );
+    } else if (response.statusCode == 404) {
+      return AiResponse(
+        success: false,
+        error: 'Endpoint API tidak ditemukan (404). Periksa kembali Base URL di pengaturan.',
       );
     } else if (response.statusCode == 429) {
       return AiResponse(
         success: false,
-        error: 'Terlalu banyak permintaan. Silakan tunggu sebentar.',
+        error: 'Terlalu banyak permintaan (Rate limit). Silakan tunggu beberapa saat.',
       );
     } else {
       try {
         final errorData = jsonDecode(response.body);
-        final errorMessage = errorData['error']?['message'] ??
-            errorData['error']?['type'] ??
-            'Gagal menghubungi AI. Kode: ${response.statusCode}';
         return AiResponse(
           success: false,
-          error: errorMessage.toString(),
+          error: errorData['error']?['message'] ??
+              'Gagal menghubungi AI (Status ${response.statusCode}).',
         );
       } catch (_) {
         return AiResponse(
           success: false,
-          error: 'Gagal menghubungi AI. Kode: ${response.statusCode}',
+          error: 'Gagal menghubungi AI. Status kode: ${response.statusCode}',
         );
       }
     }
@@ -246,12 +233,12 @@ Tugasmu adalah membantu user mencatat pemasukan dan pengeluaran, serta memberika
 
 ATURAN PENTING:
 1. Selalu gunakan Bahasa Indonesia yang ramah dan santai.
-2. Jika user menyebutkan transaksi apapun (beli, bayar, jajan, makan, gaji, dapat uang, dll), kamu WAJIB menyertakan tag TRANSACTION_REQUEST di akhir pesanmu.
-3. JANGAN pernah hanya bertanya konfirmasi tanpa menyertakan tag TRANSACTION_REQUEST. Tag harus SELALU ada jika ada transaksi yang disebutkan.
-4. User akan melihat dialog konfirmasi otomatis dari aplikasi, jadi kamu tidak perlu meminta mereka bilang "ya" atau "setuju".
-5. Jika diminta analisa, berikan insight yang berguna berdasarkan data yang ada.
-6. Kamu PUNYA AKSES ke data keuangan user (saldo, daftar akun, transaksi hari ini, dan riwayat transaksi terbaru). Data ini ada di bagian bawah prompt ini. SELALU gunakan data tersebut untuk menjawab pertanyaan user tentang transaksi mereka.
-7. JANGAN PERNAH bilang "saya tidak punya akses data" atau "saya tidak bisa melihat transaksi". Kamu SUDAH punya datanya.
+2. Jika user menyebutkan transaksi apapun (beli, bayar, jajan, makan, gaji, dapat uang, transfer, dll), kamu WAJIB menyertakan tag TRANSACTION_REQUEST di akhir pesanmu.
+3. Tentukan akun (rekening/dompet) dan kategori yang paling cocok secara cerdas:
+   - Jika user menyebut bank/metode (misal BCA, Mandiri, Cash, Dompet, QRIS, GoPay), sebutkan nama akun tersebut di tag TRANSACTION_REQUEST.
+   - Pilih categoryId yang paling tepat.
+4. JANGAN pernah hanya bertanya konfirmasi tanpa menyertakan tag TRANSACTION_REQUEST. Tag harus SELALU ada jika ada transaksi yang disebutkan.
+5. User akan melihat dialog konfirmasi interaktif di aplikasi, jadi kamu tidak perlu meminta konfirmasi manual di teks.
 
 FORMAT TRANSAKSI (WAJIB ada jika user menyebut transaksi):
 Setelah pesanmu, SELALU sertakan format ini jika user menyebut transaksi apapun:
@@ -261,32 +248,21 @@ Setelah pesanmu, SELALU sertakan format ini jika user menyebut transaksi apapun:
   "type": "income" atau "expense",
   "amount": jumlah dalam angka (tanpa titik atau koma),
   "categoryId": "pilih dari daftar kategori di bawah",
+  "accountName": "nama akun jika disebutkan user, misal BCA / Cash / Mandiri / GoPay",
   "description": "deskripsi singkat"
 }
 [/TRANSACTION_REQUEST]
 
-CONTOH RESPONS YANG BENAR:
-User: "beli makaroni 15rb"
-Respons: "Oke, aku catat pengeluaran untuk beli makaroni ya! 🍝
+CONTOH RESPONS:
+User: "beli makan siang 25rb"
+Respons: "Oke, aku bantu catat pengeluaran makan siangnya ya! 🍲
 
 [TRANSACTION_REQUEST]
 {
   "type": "expense",
-  "amount": 15000,
+  "amount": 25000,
   "categoryId": "cat_food",
-  "description": "Beli makaroni"
-}
-[/TRANSACTION_REQUEST]"
-
-User: "gajian 5 juta"
-Respons: "Wah selamat gajian! 💰 Aku catat pemasukannya ya!
-
-[TRANSACTION_REQUEST]
-{
-  "type": "income",
-  "amount": 5000000,
-  "categoryId": "cat_salary",
-  "description": "Gaji bulanan"
+  "description": "Makan siang"
 }
 [/TRANSACTION_REQUEST]"
 
@@ -306,93 +282,33 @@ KATEGORI PEMASUKAN (income):
 - cat_investment: Investasi
 - cat_gift: Hadiah
 - cat_other_income: Lainnya
-
-INGAT: Tag TRANSACTION_REQUEST WAJIB disertakan setiap kali user menyebutkan transaksi! Aplikasi akan menampilkan dialog konfirmasi secara otomatis.
 ''');
 
     // Add financial context if available
     if (context != null) {
-      buffer.writeln('\nTANGGAL HARI INI: ${context['currentDate'] ?? '-'}');
-
       buffer.writeln('\nKONTEKS KEUANGAN USER SAAT INI:');
+      if (context['currentDate'] != null) {
+        buffer.writeln('- Tanggal Hari Ini: ${context['currentDate']}');
+      }
       if (context['totalBalance'] != null) {
-        buffer.writeln(
-          '- Total Saldo: Rp${_formatNumber(context['totalBalance'])}',
-        );
+        buffer.writeln('- Total Saldo: Rp${_formatNumber(context['totalBalance'])}');
       }
       if (context['monthlyIncome'] != null) {
-        buffer.writeln(
-          '- Pemasukan Bulan Ini: Rp${_formatNumber(context['monthlyIncome'])}',
-        );
+        buffer.writeln('- Pemasukan Bulan Ini: Rp${_formatNumber(context['monthlyIncome'])}');
       }
       if (context['monthlyExpense'] != null) {
-        buffer.writeln(
-          '- Pengeluaran Bulan Ini: Rp${_formatNumber(context['monthlyExpense'])}',
-        );
+        buffer.writeln('- Pengeluaran Bulan Ini: Rp${_formatNumber(context['monthlyExpense'])}');
       }
-      if (context['topExpenseCategories'] != null) {
-        buffer.writeln('- Kategori Pengeluaran Terbesar Bulan Ini:');
-        for (final cat in context['topExpenseCategories'] as List) {
-          buffer.writeln(
-            '  * ${cat['name']}: Rp${_formatNumber(cat['amount'])}',
-          );
-        }
-      }
-
-      // Account details
       if (context['accounts'] != null) {
-        final accounts = context['accounts'] as List;
-        if (accounts.isNotEmpty) {
-          buffer.writeln('\nDAFTAR AKUN:');
-          for (final acc in accounts) {
-            buffer.writeln(
-              '- ${acc['name']} (${acc['type']}): Rp${_formatNumber(acc['balance'])}',
-            );
-          }
+        buffer.writeln('- Daftar Akun:');
+        for (final acc in context['accounts'] as List) {
+          buffer.writeln('  * ${acc['name']} (${acc['type']}): Rp${_formatNumber(acc['balance'])}');
         }
       }
-
-      // This month's transactions (ALL)
       if (context['thisMonthTransactions'] != null) {
-        final monthTx = context['thisMonthTransactions'] as List;
-        if (monthTx.isEmpty) {
-          buffer.writeln('\nTRANSAKSI BULAN INI: Belum ada transaksi bulan ini.');
-        } else {
-          buffer.writeln('\nSEMUA TRANSAKSI BULAN INI (${monthTx.length} transaksi):');
-          for (final tx in monthTx) {
-            final type = tx['type'] == 'pemasukan' ? '📈' : '📉';
-            buffer.writeln(
-              '- $type [${tx['date']} ${tx['time']}] ${tx['description']} - Rp${_formatNumber(tx['amount'])} (${tx['category']}, akun: ${tx['account']})',
-            );
-          }
-        }
-      }
-
-      // Last month summary + transactions
-      if (context['lastMonthIncome'] != null ||
-          context['lastMonthExpense'] != null) {
-        buffer.writeln('\nRINGKASAN BULAN LALU:');
-        if (context['lastMonthIncome'] != null) {
-          buffer.writeln(
-            '- Pemasukan: Rp${_formatNumber(context['lastMonthIncome'])}',
-          );
-        }
-        if (context['lastMonthExpense'] != null) {
-          buffer.writeln(
-            '- Pengeluaran: Rp${_formatNumber(context['lastMonthExpense'])}',
-          );
-        }
-      }
-      if (context['lastMonthTransactions'] != null) {
-        final lastTx = context['lastMonthTransactions'] as List;
-        if (lastTx.isNotEmpty) {
-          buffer.writeln('TRANSAKSI BULAN LALU (${lastTx.length} transaksi):');
-          for (final tx in lastTx) {
-            final type = tx['type'] == 'pemasukan' ? '📈' : '📉';
-            buffer.writeln(
-              '- $type [${tx['date']}] ${tx['description']} - Rp${_formatNumber(tx['amount'])} (${tx['category']})',
-            );
-          }
+        buffer.writeln('- Transaksi Bulan Ini:');
+        for (final tx in (context['thisMonthTransactions'] as List).take(15)) {
+          buffer.writeln('  * ${tx['date']}: ${tx['type']} Rp${_formatNumber(tx['amount'])} (${tx['category']}) - ${tx['description']}');
         }
       }
     }
@@ -428,6 +344,7 @@ INGAT: Tag TRANSACTION_REQUEST WAJIB disertakan setiap kali user menyebutkan tra
         type: data['type'] as String,
         amount: (data['amount'] as num).toDouble(),
         categoryId: data['categoryId'] as String,
+        accountName: data['accountName'] as String?,
         description: data['description'] as String?,
       );
     } catch (e) {

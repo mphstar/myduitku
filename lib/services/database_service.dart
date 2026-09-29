@@ -186,12 +186,14 @@ class DatabaseService {
   }
 
   double getBudgetSpent(Budget budget) {
+    final start = budget.startDate.subtract(const Duration(seconds: 1));
+    final end = budget.endDate.add(const Duration(seconds: 1));
     final transactions = getTransactionsByCategory(budget.categoryId)
         .where(
           (t) =>
               t.type == TransactionType.expense &&
-              t.date.isAfter(budget.startDate) &&
-              t.date.isBefore(budget.endDate),
+              t.date.isAfter(start) &&
+              t.date.isBefore(end),
         )
         .toList();
     return transactions.fold(0, (sum, t) => sum + t.amount);
