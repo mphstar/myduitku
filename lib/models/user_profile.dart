@@ -6,6 +6,8 @@ class UserProfile {
     this.currency = 'IDR',
     this.aiApiKey,
     this.aiModel,
+    this.aiProvider,
+    this.aiCustomBaseUrl,
     DateTime? createdAt,
   }) : createdAt = createdAt ?? DateTime.now();
 
@@ -15,6 +17,8 @@ class UserProfile {
     currency: json['currency'] as String? ?? 'IDR',
     aiApiKey: json['aiApiKey'] as String?,
     aiModel: json['aiModel'] as String?,
+    aiProvider: json['aiProvider'] as String?,
+    aiCustomBaseUrl: json['aiCustomBaseUrl'] as String?,
     createdAt: json['createdAt'] != null
         ? DateTime.parse(json['createdAt'] as String)
         : null,
@@ -25,6 +29,8 @@ class UserProfile {
   final String currency;
   final String? aiApiKey;
   final String? aiModel;
+  final String? aiProvider;
+  final String? aiCustomBaseUrl;
   final DateTime createdAt;
 
   Map<String, dynamic> toJson() => {
@@ -33,6 +39,8 @@ class UserProfile {
     'currency': currency,
     'aiApiKey': aiApiKey,
     'aiModel': aiModel,
+    'aiProvider': aiProvider,
+    'aiCustomBaseUrl': aiCustomBaseUrl,
     'createdAt': createdAt.toIso8601String(),
   };
 
@@ -42,6 +50,8 @@ class UserProfile {
     String? currency,
     String? aiApiKey,
     String? aiModel,
+    String? aiProvider,
+    String? aiCustomBaseUrl,
     DateTime? createdAt,
   }) {
     return UserProfile(
@@ -50,6 +60,8 @@ class UserProfile {
       currency: currency ?? this.currency,
       aiApiKey: aiApiKey ?? this.aiApiKey,
       aiModel: aiModel ?? this.aiModel,
+      aiProvider: aiProvider ?? this.aiProvider,
+      aiCustomBaseUrl: aiCustomBaseUrl ?? this.aiCustomBaseUrl,
       createdAt: createdAt ?? this.createdAt,
     );
   }

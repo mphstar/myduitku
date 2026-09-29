@@ -253,104 +253,275 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final apiKeyController = TextEditingController(
       text: userProvider.profile.aiApiKey ?? '',
     );
-    final modelController = TextEditingController(
-      text: userProvider.profile.aiModel ?? AppConstants.defaultAiModel,
+    final customUrlController = TextEditingController(
+      text: userProvider.profile.aiCustomBaseUrl ?? '',
     );
+    final customModelController = TextEditingController();
+
+    String selectedProvider =
+        userProvider.profile.aiProvider ?? AppConstants.defaultAiProvider;
+
+    // Migrate removed providers to 'custom'
+    final validProviderIds =
+        AppConstants.aiProviders.map((p) => p['id']).toList();
+    if (!validProviderIds.contains(selectedProvider)) {
+      // If it was 'deepseek', auto-fill the base URL
+      if (selectedProvider == 'deepseek') {
+        customUrlController.text = 'https://api.deepseek.com';
+      }
+      selectedProvider = 'custom';
+    }
+
+    String selectedModel = userProvider.profile.aiModel ??
+        AppConstants.getDefaultModelForProvider(selectedProvider);
 
     showDialog(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Pengaturan AI'),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'API Key OpenRouter',
-                style: TextStyle(fontWeight: FontWeight.w500),
-              ),
-              const SizedBox(height: 4),
-              TextField(
-                controller: apiKeyController,
-                decoration: InputDecoration(
-                  hintText: 'Masukkan API Key',
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setState) {
+          final providerConfig =
+              AppConstants.getProviderConfig(selectedProvider);
+          final models = AppConstants.getModelsForProvider(selectedProvider);
+
+          // Ensure selectedModel is valid for current provider
+          if (models.isNotEmpty &&
+              !models.any((m) => m['id'] == selectedModel)) {
+            selectedModel = models.first['id']!;
+          }
+
+          return AlertDialog(
+            title: Row(
+              children: [
+                Icon(Icons.smart_toy_outlined, color: AppColors.primary),
+                const SizedBox(width: 8),
+                const Text('Pengaturan AI'),
+              ],
+            ),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Provider Selection
+                  const Text(
+                    'Provider AI',
+                    style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
                   ),
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 12,
+                  const SizedBox(height: 6),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    decoration: BoxDecoration(
+                      border: Border.all(color: Colors.grey.shade300),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: DropdownButton<String>(
+                      value: selectedProvider,
+                      isExpanded: true,
+                      underline: const SizedBox(),
+                      items: AppConstants.aiProviders.map((provider) {
+                        return DropdownMenuItem<String>(
+                          value: provider['id'],
+                          child: Text(
+                            provider['name']!,
+                            style: const TextStyle(fontSize: 14),
+                          ),
+                        );
+                      }).toList(),
+                      onChanged: (value) {
+                        if (value != null) {
+                          setState(() {
+                            selectedProvider = value;
+                            // Auto-set first model for new provider
+                            final newModels =
+                                AppConstants.getModelsForProvider(value);
+                            if (newModels.isNotEmpty) {
+                              selectedModel = newModels.first['id']!;
+                            }
+                          });
+                        }
+                      },
+                    ),
                   ),
-                ),
-                obscureText: true,
+                  const SizedBox(height: 4),
+                  Text(
+                    providerConfig['hint'] ?? '',
+                    style: TextStyle(color: Colors.grey[600], fontSize: 11),
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Custom Base URL (only for Custom provider)
+                  if (selectedProvider == 'custom') ...[
+                    const Text(
+                      'Base URL',
+                      style:
+                          TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                    ),
+                    const SizedBox(height: 6),
+                    TextField(
+                      controller: customUrlController,
+                      decoration: InputDecoration(
+                        hintText: 'https://api.deepseek.com',
+                        hintStyle: const TextStyle(fontSize: 12),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 12,
+                        ),
+                      ),
+                      style: const TextStyle(fontSize: 13),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'DeepSeek: https://api.deepseek.com\n'
+                      'Groq: https://api.groq.com/openai',
+                      style: TextStyle(color: Colors.grey[500], fontSize: 10),
+                    ),
+                    const SizedBox(height: 16),
+                  ],
+
+                  // API Key
+                  const Text(
+                    'API Key',
+                    style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                  ),
+                  const SizedBox(height: 6),
+                  TextField(
+                    controller: apiKeyController,
+                    decoration: InputDecoration(
+                      hintText: 'Masukkan API Key',
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 12,
+                      ),
+                      suffixIcon: const Icon(Icons.key, size: 18),
+                    ),
+                    obscureText: true,
+                    style: const TextStyle(fontSize: 13),
+                  ),
+                  if (providerConfig['website']?.isNotEmpty == true) ...[
+                    const SizedBox(height: 6),
+                    InkWell(
+                      onTap: () {
+                        SnackBarHelper.showInfo(
+                          dialogContext,
+                          'Buka ${providerConfig['website']} untuk API Key',
+                        );
+                      },
+                      child: Row(
+                        children: [
+                          Icon(Icons.open_in_new,
+                              size: 12, color: AppColors.primary),
+                          const SizedBox(width: 4),
+                          Text(
+                            'Dapatkan API Key di ${providerConfig['website']}',
+                            style: TextStyle(
+                                color: AppColors.primary, fontSize: 11),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 16),
+
+                  // Model Selection
+                  const Text(
+                    'Model AI',
+                    style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                  ),
+                  const SizedBox(height: 6),
+                  if (models.isNotEmpty)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      decoration: BoxDecoration(
+                        border: Border.all(color: Colors.grey.shade300),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: DropdownButton<String>(
+                        value: models.any((m) => m['id'] == selectedModel)
+                            ? selectedModel
+                            : models.first['id'],
+                        isExpanded: true,
+                        underline: const SizedBox(),
+                        items: models.map((model) {
+                          return DropdownMenuItem<String>(
+                            value: model['id'],
+                            child: Text(
+                              model['name']!,
+                              style: const TextStyle(fontSize: 14),
+                            ),
+                          );
+                        }).toList(),
+                        onChanged: (value) {
+                          if (value != null) {
+                            setState(() => selectedModel = value);
+                          }
+                        },
+                      ),
+                    )
+                  else
+                    TextField(
+                      controller: customModelController
+                        ..text = selectedModel,
+                      decoration: InputDecoration(
+                        hintText: 'Masukkan model ID',
+                        hintStyle: const TextStyle(fontSize: 12),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 12,
+                        ),
+                      ),
+                      style: const TextStyle(fontSize: 13),
+                      onChanged: (value) => selectedModel = value,
+                    ),
+                  const SizedBox(height: 4),
+                  Text(
+                    selectedProvider == 'custom'
+                        ? 'Masukkan model ID sesuai server Anda'
+                        : 'Pilih model atau ketik ID model manual',
+                    style: TextStyle(color: Colors.grey[600], fontSize: 11),
+                  ),
+                ],
               ),
-              const SizedBox(height: 8),
-              InkWell(
-                onTap: () {
-                  // Open OpenRouter website
-                  SnackBarHelper.showInfo(
-                    dialogContext,
-                    'Buka https://openrouter.ai untuk mendapatkan API Key',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: const Text('Batal'),
+              ),
+              ElevatedButton(
+                onPressed: () async {
+                  final modelValue = selectedModel.trim().isEmpty
+                      ? AppConstants.getDefaultModelForProvider(selectedProvider)
+                      : selectedModel.trim();
+                  await userProvider.updateProfile(
+                    aiApiKey: apiKeyController.text.trim(),
+                    aiModel: modelValue,
+                    aiProvider: selectedProvider,
+                    aiCustomBaseUrl: selectedProvider == 'custom'
+                        ? customUrlController.text.trim()
+                        : null,
                   );
+                  if (dialogContext.mounted) {
+                    Navigator.pop(dialogContext);
+                    SnackBarHelper.showSuccess(
+                      this.context,
+                      'Pengaturan AI berhasil disimpan',
+                    );
+                  }
                 },
-                child: Text(
-                  'Dapatkan API Key di openrouter.ai',
-                  style: TextStyle(color: AppColors.primary, fontSize: 12),
-                ),
-              ),
-              const SizedBox(height: 20),
-              const Text(
-                'Model AI',
-                style: TextStyle(fontWeight: FontWeight.w500),
-              ),
-              const SizedBox(height: 4),
-              TextField(
-                controller: modelController,
-                decoration: InputDecoration(
-                  hintText: 'Contoh: google/gemini-2.0-flash-001',
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 12,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Masukkan ID model dari OpenRouter.\nContoh: google/gemini-2.0-flash-001, openai/gpt-4o-mini',
-                style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                child: const Text('Simpan'),
               ),
             ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('Batal'),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              final modelValue = modelController.text.trim().isEmpty
-                  ? AppConstants.defaultAiModel
-                  : modelController.text.trim();
-              await userProvider.updateProfile(
-                aiApiKey: apiKeyController.text.trim(),
-                aiModel: modelValue,
-              );
-              if (dialogContext.mounted) {
-                Navigator.pop(dialogContext);
-                SnackBarHelper.showSuccess(
-                  this.context,
-                  'Pengaturan AI berhasil disimpan',
-                );
-              }
-            },
-            child: const Text('Simpan'),
-          ),
-        ],
+          );
+        },
       ),
     );
   }

@@ -30,6 +30,8 @@ class UserProvider extends ChangeNotifier {
     String? currency,
     String? aiApiKey,
     String? aiModel,
+    String? aiProvider,
+    String? aiCustomBaseUrl,
   }) async {
     _profile = _profile.copyWith(
       name: name ?? _profile.name,
@@ -37,6 +39,8 @@ class UserProvider extends ChangeNotifier {
       currency: currency ?? _profile.currency,
       aiApiKey: aiApiKey ?? _profile.aiApiKey,
       aiModel: aiModel ?? _profile.aiModel,
+      aiProvider: aiProvider ?? _profile.aiProvider,
+      aiCustomBaseUrl: aiCustomBaseUrl ?? _profile.aiCustomBaseUrl,
     );
 
     await _db.saveUserProfile(_profile);

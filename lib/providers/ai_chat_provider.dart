@@ -8,7 +8,7 @@ import 'transaction_provider.dart';
 
 /// Provider for managing AI chat state
 class AiChatProvider extends ChangeNotifier {
-  final OpenRouterService _openRouter = OpenRouterService();
+  final AiService _aiService = AiService();
   final DatabaseService _db = DatabaseService();
   final Uuid _uuid = const Uuid();
 
@@ -34,6 +34,8 @@ class AiChatProvider extends ChangeNotifier {
     required String message,
     required String apiKey,
     required String model,
+    required String provider,
+    String? customBaseUrl,
     Map<String, dynamic>? financialContext,
   }) async {
     if (message.trim().isEmpty) return;
@@ -60,10 +62,12 @@ class AiChatProvider extends ChangeNotifier {
         .map((m) => {'role': m.role.name, 'content': m.content})
         .toList();
 
-    // Send to OpenRouter
-    final response = await _openRouter.sendMessage(
+    // Send to AI provider
+    final response = await _aiService.sendMessage(
       apiKey: apiKey,
       model: model,
+      provider: provider,
+      customBaseUrl: customBaseUrl,
       messages: historyMessages.cast<Map<String, String>>(),
       userMessage: message,
       financialContext: financialContext,
@@ -71,7 +75,7 @@ class AiChatProvider extends ChangeNotifier {
 
     if (response.success && response.content != null) {
       // Clean content for display
-      final cleanContent = _openRouter.cleanResponseContent(response.content!);
+      final cleanContent = _aiService.cleanResponseContent(response.content!);
 
       final assistantMessage = ChatMessage(
         id: _uuid.v4(),
@@ -185,9 +189,12 @@ class AiChatProvider extends ChangeNotifier {
   }
 
   /// Get model name from ID
-  String getModelName(String? modelId) {
+  String getModelName(String? modelId, {String? providerId}) {
     if (modelId == null) return 'Default';
-    final model = AppConstants.availableAiModels.firstWhere(
+    final models = AppConstants.getModelsForProvider(
+      providerId ?? AppConstants.defaultAiProvider,
+    );
+    final model = models.firstWhere(
       (m) => m['id'] == modelId,
       orElse: () => {'name': modelId},
     );

@@ -70,9 +70,64 @@ class _AiChatScreenState extends State<AiChatScreen> {
     final now = DateTime.now();
     final monthStart = DateTime(now.year, now.month, 1);
     final monthEnd = DateTime(now.year, now.month + 1, 0);
+    final lastMonthStart = DateTime(now.year, now.month - 1, 1);
+    final lastMonthEnd = DateTime(now.year, now.month, 0);
+
+    final accountProvider = context.read<AccountProvider>();
+
+    // Helper to format a transaction for AI context
+    Map<String, dynamic> _formatTx(transaction) {
+      final category = categoryProvider.getCategoryById(transaction.categoryId);
+      final account = accountProvider.getAccountById(transaction.accountId);
+      return {
+        'type': transaction.type == TransactionType.income
+            ? 'pemasukan'
+            : 'pengeluaran',
+        'amount': transaction.amount,
+        'category': category?.name ?? 'Lainnya',
+        'account': account?.name ?? '-',
+        'description': transaction.description ?? '-',
+        'date':
+            '${transaction.date.day}/${transaction.date.month}/${transaction.date.year}',
+        'time':
+            '${transaction.date.hour.toString().padLeft(2, '0')}:${transaction.date.minute.toString().padLeft(2, '0')}',
+      };
+    }
+
+    // Get ALL transactions this month (for answering any date question)
+    final thisMonthTransactions = transactionProvider.allTransactions
+        .where(
+          (t) =>
+              t.date.isAfter(
+                monthStart.subtract(const Duration(seconds: 1)),
+              ) &&
+              t.date.isBefore(monthEnd.add(const Duration(days: 1))),
+        )
+        .map(_formatTx)
+        .toList();
+
+    // Get last month summary + transactions
+    final lastMonthTransactions = transactionProvider.allTransactions
+        .where(
+          (t) =>
+              t.date.isAfter(
+                lastMonthStart.subtract(const Duration(seconds: 1)),
+              ) &&
+              t.date.isBefore(lastMonthEnd.add(const Duration(days: 1))),
+        )
+        .map(_formatTx)
+        .toList();
+
+    // Get account details
+    final accountDetails = accountProvider.accounts.map((a) => {
+      'name': a.name,
+      'type': a.type.displayName,
+      'balance': a.balance,
+    }).toList();
 
     final financialContext = <String, dynamic>{
-      'totalBalance': context.read<AccountProvider>().totalBalance,
+      'totalBalance': accountProvider.totalBalance,
+      'currentDate': '${now.day}/${now.month}/${now.year}',
       'monthlyIncome': transactionProvider.getTotalIncomeForRange(
         monthStart,
         monthEnd,
@@ -87,12 +142,25 @@ class _AiChatScreenState extends State<AiChatScreen> {
         monthStart,
         monthEnd,
       ),
+      'thisMonthTransactions': thisMonthTransactions,
+      'lastMonthIncome': transactionProvider.getTotalIncomeForRange(
+        lastMonthStart,
+        lastMonthEnd,
+      ),
+      'lastMonthExpense': transactionProvider.getTotalExpenseForRange(
+        lastMonthStart,
+        lastMonthEnd,
+      ),
+      'lastMonthTransactions': lastMonthTransactions,
+      'accounts': accountDetails,
     };
 
     await aiChatProvider.sendMessage(
       message: message,
       apiKey: userProvider.profile.aiApiKey!,
       model: userProvider.profile.aiModel ?? AppConstants.defaultAiModel,
+      provider: userProvider.profile.aiProvider ?? AppConstants.defaultAiProvider,
+      customBaseUrl: userProvider.profile.aiCustomBaseUrl,
       financialContext: financialContext,
     );
 
@@ -130,8 +198,8 @@ class _AiChatScreenState extends State<AiChatScreen> {
       builder: (context) => AlertDialog(
         title: const Text('Pengaturan AI'),
         content: const Text(
-          'Anda perlu memasukkan API Key OpenRouter untuk menggunakan fitur AI Chat.\n\n'
-          'Silakan buka halaman Profil > Pengaturan AI untuk mengatur API Key.',
+          'Anda perlu mengatur API Key AI provider untuk menggunakan fitur AI Chat.\n\n'
+          'Silakan buka halaman Profil > Pengaturan AI untuk mengatur provider dan API Key.',
         ),
         actions: [
           TextButton(
