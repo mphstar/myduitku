@@ -133,6 +133,13 @@ class _AccountsScreenState extends State<AccountsScreen> {
   }
 
   Widget _buildAccountCard(BuildContext context, Account account) {
+    final currentPrimary = Color(
+      context.watch<UserProvider>().profile.primaryColor,
+    );
+    final accountColor = account.color != null
+        ? Color(account.color!)
+        : currentPrimary;
+
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
       child: ListTile(
@@ -140,16 +147,12 @@ class _AccountsScreenState extends State<AccountsScreen> {
         leading: Container(
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            color: account.color != null
-                ? Color(account.color!).withOpacity(0.1)
-                : AppColors.primary.withOpacity(0.1),
+            color: accountColor.withValues(alpha: 0.12),
             borderRadius: BorderRadius.circular(12),
           ),
           child: Icon(
             AppIcons.getIcon(account.type.icon),
-            color: account.color != null
-                ? Color(account.color!)
-                : AppColors.primary,
+            color: accountColor,
             size: 24,
           ),
         ),
@@ -267,13 +270,16 @@ class _AccountsScreenState extends State<AccountsScreen> {
   }
 
   void _showAccountFormDialog(BuildContext context, Account? account) {
+    final currentPrimary = Color(
+      context.read<UserProvider>().profile.primaryColor,
+    );
     final isEditing = account != null;
     final nameController = TextEditingController(text: account?.name ?? '');
     final balanceController = TextEditingController(
       text: account?.balance.toStringAsFixed(0) ?? '',
     );
     AccountType selectedType = account?.type ?? AccountType.bank;
-    int selectedColor = account?.color ?? AppColors.primary.value;
+    int selectedColor = account?.color ?? currentPrimary.toARGB32();
 
     showModalBottomSheet(
       context: context,
@@ -342,12 +348,12 @@ class _AccountsScreenState extends State<AccountsScreen> {
                         padding: const EdgeInsets.symmetric(vertical: 12),
                         decoration: BoxDecoration(
                           color: isSelected
-                              ? AppColors.primary.withOpacity(0.1)
-                              : Colors.grey.withOpacity(0.1),
+                              ? currentPrimary.withValues(alpha: 0.1)
+                              : Colors.grey.withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(12),
                           border: Border.all(
                             color: isSelected
-                                ? AppColors.primary
+                                ? currentPrimary
                                 : Colors.transparent,
                             width: 2,
                           ),
@@ -357,7 +363,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
                             Icon(
                               AppIcons.getIcon(type.icon),
                               color: isSelected
-                                  ? AppColors.primary
+                                  ? currentPrimary
                                   : Colors.grey,
                             ),
                             const SizedBox(height: 4),
@@ -366,7 +372,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
                               style: TextStyle(
                                 fontSize: 12,
                                 color: isSelected
-                                    ? AppColors.primary
+                                    ? currentPrimary
                                     : Colors.grey,
                                 fontWeight: isSelected
                                     ? FontWeight.bold

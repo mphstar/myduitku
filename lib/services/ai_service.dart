@@ -32,6 +32,7 @@ class AiService {
       final modelsUrl = AppConstants.formatModelsUrl(customBaseUrl);
       final headers = <String, String>{
         'Content-Type': 'application/json',
+        'Accept': 'application/json',
         if (apiKey.trim().isNotEmpty) 'Authorization': 'Bearer ${apiKey.trim()}',
       };
 
@@ -39,7 +40,7 @@ class AiService {
           .get(Uri.parse(modelsUrl), headers: headers)
           .timeout(const Duration(seconds: 15));
 
-      if (response.statusCode == 200) {
+      if (response.statusCode >= 200 && response.statusCode < 300) {
         final data = jsonDecode(response.body);
         final modelIds = <String>[];
 
@@ -80,8 +81,8 @@ class AiService {
         return modelIds;
       }
       return [];
-    } catch (_) {
-      return [];
+    } catch (e) {
+      rethrow;
     }
   }
 

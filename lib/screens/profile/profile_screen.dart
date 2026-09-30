@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../core/theme.dart';
 import '../../core/constants.dart';
 import '../../providers/providers.dart';
@@ -192,6 +193,21 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ]),
               const SizedBox(height: 16),
 
+              // Support & Feedback
+              _buildSection('Dukungan & Masukan', [
+                _buildTile(
+                  Icons.chat_bubble_outline_rounded,
+                  'Saran Pengembangan',
+                  () => _launchWhatsApp(context),
+                ),
+                _buildTile(
+                  Icons.favorite_outline_rounded,
+                  'Support Saya (Sociabuzz)',
+                  () => _launchUrl('https://sociabuzz.com/mphstar'),
+                ),
+              ]),
+              const SizedBox(height: 16),
+
               // About
               _buildSection('Tentang', [
                 _buildTile(Icons.info_outline, 'Versi 1.0.0', null),
@@ -234,36 +250,190 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
+  Future<void> _launchWhatsApp(BuildContext context) async {
+    final uri = Uri.parse('https://wa.me/62895393933040?text=Halo,%20saya%20ingin%20memberikan%20saran%20pengembangan%20untuk%20aplikasi%20MyDuitKu:');
+    try {
+      if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
+        if (context.mounted) {
+          SnackBarHelper.showError(context, 'Tidak dapat membuka WhatsApp');
+        }
+      }
+    } catch (_) {
+      if (context.mounted) {
+        SnackBarHelper.showError(context, 'Gagal membuka tautan WhatsApp');
+      }
+    }
+  }
+
+  Future<void> _launchUrl(String urlString) async {
+    final uri = Uri.parse(urlString);
+    try {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } catch (_) {
+      if (mounted) {
+        SnackBarHelper.showError(context, 'Gagal membuka tautan');
+      }
+    }
+  }
+
   void _showEditProfileDialog(BuildContext context) {
+    final userProvider = context.read<UserProvider>();
+    final currentPrimary = Color(userProvider.profile.primaryColor);
     final nameController = TextEditingController(
-      text: context.read<UserProvider>().profile.name,
+      text: userProvider.profile.name,
     );
+
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Edit Profil'),
-        content: TextField(
-          controller: nameController,
-          decoration: const InputDecoration(labelText: 'Nama'),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Batal'),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              if (nameController.text.isNotEmpty) {
-                await context.read<UserProvider>().updateProfile(
-                  name: nameController.text,
-                );
-                if (context.mounted) Navigator.pop(context);
-              }
+      builder: (dialogCtx) {
+        final isDark = Theme.of(dialogCtx).brightness == Brightness.dark;
+
+        return Dialog(
+          backgroundColor: Colors.transparent,
+          insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+          child: TweenAnimationBuilder<double>(
+            duration: const Duration(milliseconds: 250),
+            curve: Curves.easeOutBack,
+            tween: Tween(begin: 0.85, end: 1.0),
+            builder: (context, scale, child) {
+              return Transform.scale(scale: scale, child: child);
             },
-            child: const Text('Simpan'),
+            child: Container(
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: isDark ? const Color(0xFF1E222D) : Colors.white,
+                borderRadius: BorderRadius.circular(28),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.15),
+                    blurRadius: 30,
+                    offset: const Offset(0, 15),
+                  ),
+                ],
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Icon Header
+                  Container(
+                    width: 60,
+                    height: 60,
+                    decoration: BoxDecoration(
+                      color: currentPrimary.withValues(alpha: 0.12),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      Icons.person_outline_rounded,
+                      color: currentPrimary,
+                      size: 30,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Title
+                  Text(
+                    'Edit Profil',
+                    style: TextStyle(
+                      fontSize: 19,
+                      fontWeight: FontWeight.w700,
+                      color: isDark ? Colors.white : const Color(0xFF171A2B),
+                      letterSpacing: -0.3,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'Ubah nama tampilan akun Anda',
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: isDark ? const Color(0xFF9EABB9) : const Color(0xFF64748B),
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+
+                  // Name Field
+                  TextField(
+                    controller: nameController,
+                    autofocus: true,
+                    decoration: InputDecoration(
+                      labelText: 'Nama Lengkap',
+                      prefixIcon: Icon(Icons.badge_outlined, color: currentPrimary, size: 20),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+
+                  // Actions
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: () => Navigator.pop(dialogCtx),
+                          style: OutlinedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            side: BorderSide(
+                              color: isDark ? const Color(0xFF333A4D) : const Color(0xFFE2E8F0),
+                              width: 1.5,
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                          ),
+                          child: Text(
+                            'Batal',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                              color: isDark ? const Color(0xFFCBD5E1) : const Color(0xFF64748B),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: ElevatedButton(
+                          onPressed: () async {
+                            if (nameController.text.trim().isNotEmpty) {
+                              await userProvider.updateProfile(
+                                name: nameController.text.trim(),
+                              );
+                              if (dialogCtx.mounted) {
+                                Navigator.pop(dialogCtx);
+                                SnackBarHelper.showSuccess(
+                                  dialogCtx,
+                                  'Profil berhasil diperbarui',
+                                );
+                              }
+                            }
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: currentPrimary,
+                            foregroundColor: Colors.white,
+                            elevation: 0,
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                          ),
+                          child: const Text(
+                            'Simpan',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
           ),
-        ],
-      ),
+        );
+      },
     );
   }
 
@@ -275,78 +445,153 @@ class _ProfileScreenState extends State<ProfileScreen> {
       context: context,
       builder: (dialogCtx) => StatefulBuilder(
         builder: (context, setState) {
+          final isDark = Theme.of(dialogCtx).brightness == Brightness.dark;
           final activePrimary = Color(userProvider.profile.primaryColor);
 
-          return AlertDialog(
-            title: Row(
-              children: [
-                Icon(Icons.palette_outlined, color: activePrimary),
-                const SizedBox(width: 8),
-                const Text('Warna Tema Utama'),
-              ],
-            ),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Pilih warna aksen utama aplikasi sesuai preferensi Anda:',
-                  style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
+          return Dialog(
+            backgroundColor: Colors.transparent,
+            insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+            child: TweenAnimationBuilder<double>(
+              duration: const Duration(milliseconds: 250),
+              curve: Curves.easeOutBack,
+              tween: Tween(begin: 0.85, end: 1.0),
+              builder: (context, scale, child) {
+                return Transform.scale(scale: scale, child: child);
+              },
+              child: Container(
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  color: isDark ? const Color(0xFF1E222D) : Colors.white,
+                  borderRadius: BorderRadius.circular(28),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.15),
+                      blurRadius: 30,
+                      offset: const Offset(0, 15),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 16),
-                Wrap(
-                  spacing: 12,
-                  runSpacing: 12,
-                  children: AppThemePresets.presets.map((preset) {
-                    final Color color = preset['color'] as Color;
-                    final int colorValue = color.toARGB32();
-                    final isSelected = currentColor == colorValue;
-
-                    return GestureDetector(
-                      onTap: () async {
-                        setState(() => currentColor = colorValue);
-                        await userProvider.updateProfile(primaryColor: colorValue);
-                        if (dialogCtx.mounted) {
-                          Navigator.pop(dialogCtx);
-                          SnackBarHelper.showSuccess(
-                            this.context,
-                            'Tema warna berhasil diubah ke ${preset['name']}',
-                          );
-                        }
-                      },
-                      child: Container(
-                        width: 48,
-                        height: 48,
-                        decoration: BoxDecoration(
-                          color: color,
-                          borderRadius: BorderRadius.circular(14),
-                          border: Border.all(
-                            color: isSelected ? Colors.black87 : Colors.transparent,
-                            width: 3,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          width: 44,
+                          height: 44,
+                          decoration: BoxDecoration(
+                            color: activePrimary.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(14),
                           ),
-                          boxShadow: [
-                            BoxShadow(
-                              color: color.withValues(alpha: 0.3),
-                              blurRadius: 6,
-                              offset: const Offset(0, 2),
-                            ),
-                          ],
+                          child: Icon(Icons.palette_outlined, color: activePrimary, size: 24),
                         ),
-                        child: isSelected
-                            ? const Icon(Icons.check, color: Colors.white, size: 24)
-                            : null,
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Warna Tema Utama',
+                                style: TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w700,
+                                  color: isDark ? Colors.white : const Color(0xFF171A2B),
+                                  letterSpacing: -0.3,
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                'Pilih tema warna aplikasi',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: isDark ? const Color(0xFF9EABB9) : const Color(0xFF64748B),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 20),
+                    Center(
+                      child: Wrap(
+                        spacing: 12,
+                        runSpacing: 12,
+                        children: AppThemePresets.presets.map((preset) {
+                          final Color color = preset['color'] as Color;
+                          final int colorValue = color.toARGB32();
+                          final isSelected = currentColor == colorValue;
+
+                          return GestureDetector(
+                            onTap: () async {
+                              setState(() => currentColor = colorValue);
+                              await userProvider.updateProfile(primaryColor: colorValue);
+                              if (dialogCtx.mounted) {
+                                Navigator.pop(dialogCtx);
+                                SnackBarHelper.showSuccess(
+                                  dialogCtx,
+                                  'Tema berhasil diubah ke ${preset['name']}',
+                                );
+                              }
+                            },
+                            child: Container(
+                              width: 52,
+                              height: 52,
+                              decoration: BoxDecoration(
+                                color: color,
+                                borderRadius: BorderRadius.circular(16),
+                                border: Border.all(
+                                  color: isSelected
+                                      ? (isDark ? Colors.white : Colors.black87)
+                                      : Colors.transparent,
+                                  width: 3,
+                                ),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: color.withValues(alpha: 0.35),
+                                    blurRadius: 8,
+                                    offset: const Offset(0, 3),
+                                  ),
+                                ],
+                              ),
+                              child: isSelected
+                                  ? const Icon(Icons.check_rounded, color: Colors.white, size: 28)
+                                  : null,
+                            ),
+                          );
+                        }).toList(),
                       ),
-                    );
-                  }).toList(),
+                    ),
+                    const SizedBox(height: 24),
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton(
+                        onPressed: () => Navigator.pop(dialogCtx),
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 13),
+                          side: BorderSide(
+                            color: isDark ? const Color(0xFF333A4D) : const Color(0xFFE2E8F0),
+                            width: 1.5,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                        ),
+                        child: Text(
+                          'Tutup',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: isDark ? const Color(0xFFCBD5E1) : const Color(0xFF64748B),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-              ],
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(dialogCtx),
-                child: const Text('Tutup'),
               ),
-            ],
+            ),
           );
         },
       ),
@@ -355,6 +600,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   void _showAiSettingsDialog(BuildContext context) {
     final userProvider = context.read<UserProvider>();
+    final currentPrimary = Color(userProvider.profile.primaryColor);
     final endpointController = TextEditingController(
       text: userProvider.profile.aiCustomBaseUrl ?? '',
     );
@@ -373,6 +619,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
       context: context,
       builder: (dialogContext) => StatefulBuilder(
         builder: (context, setState) {
+          final isDark = Theme.of(dialogContext).brightness == Brightness.dark;
+
           Future<void> fetchModelsFromApi() async {
             setState(() {
               isFetchingModels = true;
@@ -389,13 +637,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
               if (dialogContext.mounted) {
                 if (models.isNotEmpty) {
                   SnackBarHelper.showSuccess(
-                    context,
+                    dialogContext,
                     'Berhasil mengambil ${models.length} model',
                   );
                 } else {
                   SnackBarHelper.showWarning(
-                    context,
-                    'Tidak dapat menemukan daftar model. Anda tetap dapat mengetik nama model secara manual.',
+                    dialogContext,
+                    'Tidak ditemukan model dari server.',
                   );
                 }
               }
@@ -403,211 +651,314 @@ class _ProfileScreenState extends State<ProfileScreen> {
               setState(() => isFetchingModels = false);
               if (dialogContext.mounted) {
                 SnackBarHelper.showError(
-                  context,
-                  'Gagal menghubungi endpoint /models',
+                  dialogContext,
+                  'Gagal mengambil daftar model',
                 );
               }
             }
           }
 
-          return AlertDialog(
-            title: Row(
-              children: [
-                Icon(Icons.smart_toy_outlined, color: AppColors.primary),
-                const SizedBox(width: 8),
-                const Text('Pengaturan AI (OpenAI API)'),
-              ],
-            ),
-            content: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Endpoint URL
-                  const Text(
-                    'Base URL API (contoh: https://9router.mphstar.my.id/v1)',
-                    style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
-                  ),
-                  const SizedBox(height: 6),
-                  TextField(
-                    controller: endpointController,
-                    decoration: InputDecoration(
-                      hintText: 'https://api.openai.com/v1',
-                      hintStyle: const TextStyle(fontSize: 12),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 12,
-                      ),
+          return Dialog(
+            backgroundColor: Colors.transparent,
+            insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
+            child: TweenAnimationBuilder<double>(
+              duration: const Duration(milliseconds: 250),
+              curve: Curves.easeOutBack,
+              tween: Tween(begin: 0.85, end: 1.0),
+              builder: (context, scale, child) {
+                return Transform.scale(scale: scale, child: child);
+              },
+              child: Container(
+                padding: const EdgeInsets.all(22),
+                decoration: BoxDecoration(
+                  color: isDark ? const Color(0xFF1E222D) : Colors.white,
+                  borderRadius: BorderRadius.circular(26),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.15),
+                      blurRadius: 30,
+                      offset: const Offset(0, 15),
                     ),
-                    style: const TextStyle(fontSize: 13),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Contoh base URL:\n'
-                    '• Custom Proxy: https://9router.mphstar.my.id/v1\n'
-                    '• OpenAI: https://api.openai.com/v1\n'
-                    '• DeepSeek: https://api.deepseek.com\n'
-                    '• Groq: https://api.groq.com/openai/v1\n'
-                    '• OpenRouter: https://openrouter.ai/api/v1\n'
-                    '• Local/Ollama: http://localhost:11434/v1',
-                    style: TextStyle(color: Colors.grey[600], fontSize: 11, height: 1.3),
-                  ),
-                  const SizedBox(height: 16),
-
-                  // API Key
-                  const Text(
-                    'API Key',
-                    style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
-                  ),
-                  const SizedBox(height: 6),
-                  TextField(
-                    controller: apiKeyController,
-                    decoration: InputDecoration(
-                      hintText: 'sk-xxxxxxxxxxxx',
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 12,
-                      ),
-                      suffixIcon: const Icon(Icons.key, size: 18),
-                    ),
-                    obscureText: true,
-                    style: const TextStyle(fontSize: 13),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Opsional jika server lokal tidak membutuhkan API key.',
-                    style: TextStyle(color: Colors.grey[600], fontSize: 11),
-                  ),
-                  const SizedBox(height: 16),
-
-                  // Model Selection & Fetch Button
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  ],
+                ),
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      // Header
+                      Row(
+                        children: [
+                          Container(
+                            width: 42,
+                            height: 42,
+                            decoration: BoxDecoration(
+                              color: currentPrimary.withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Icon(Icons.smart_toy_outlined, color: currentPrimary, size: 22),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Pengaturan AI',
+                                  style: TextStyle(
+                                    fontSize: 17,
+                                    fontWeight: FontWeight.w700,
+                                    color: isDark ? Colors.white : const Color(0xFF171A2B),
+                                    letterSpacing: -0.3,
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  'OpenAI Compatibility',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: isDark ? const Color(0xFF9EABB9) : const Color(0xFF64748B),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 18),
+
+                      // Endpoint URL Field
                       const Text(
-                        'Model AI',
+                        'Base URL API',
                         style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
                       ),
-                      TextButton.icon(
-                        onPressed: isFetchingModels ? null : fetchModelsFromApi,
-                        icon: isFetchingModels
-                            ? const SizedBox(
-                                width: 12,
-                                height: 12,
-                                child: CircularProgressIndicator(strokeWidth: 2),
-                              )
-                            : const Icon(Icons.refresh_rounded, size: 14),
-                        label: Text(
-                          isFetchingModels ? 'Memuat...' : 'Fetch Model',
-                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                      const SizedBox(height: 6),
+                      TextField(
+                        controller: endpointController,
+                        decoration: InputDecoration(
+                          hintText: 'https://api.openai.com/v1',
+                          hintStyle: const TextStyle(fontSize: 12),
+                          prefixIcon: const Icon(Icons.link_rounded, size: 20),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 12,
+                          ),
                         ),
-                        style: TextButton.styleFrom(
-                          foregroundColor: AppColors.primary,
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                          minimumSize: Size.zero,
-                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        style: const TextStyle(fontSize: 13),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Mendukung semua server OpenAI compatible API (misal OpenAI, DeepSeek, Groq, OpenRouter, atau server custom proxy/lokal).',
+                        style: TextStyle(
+                          color: isDark ? const Color(0xFF8E9BAA) : const Color(0xFF64748B),
+                          fontSize: 11,
+                          height: 1.3,
                         ),
+                      ),
+                      const SizedBox(height: 14),
+
+                      // API Key Field
+                      const Text(
+                        'API Key',
+                        style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                      ),
+                      const SizedBox(height: 6),
+                      TextField(
+                        controller: apiKeyController,
+                        decoration: InputDecoration(
+                          hintText: 'sk-... (opsional untuk server lokal)',
+                          prefixIcon: const Icon(Icons.key_rounded, size: 20),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 12,
+                          ),
+                        ),
+                        obscureText: true,
+                        style: const TextStyle(fontSize: 13),
+                      ),
+                      const SizedBox(height: 14),
+
+                      // Model Selection Section
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text(
+                            'Model AI',
+                            style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                          ),
+                          TextButton.icon(
+                            onPressed: isFetchingModels ? null : fetchModelsFromApi,
+                            icon: isFetchingModels
+                                ? const SizedBox(
+                                    width: 12,
+                                    height: 12,
+                                    child: CircularProgressIndicator(strokeWidth: 2),
+                                  )
+                                : const Icon(Icons.refresh_rounded, size: 14),
+                            label: Text(
+                              isFetchingModels ? 'Memuat...' : 'Fetch Model',
+                              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                            ),
+                            style: TextButton.styleFrom(
+                              foregroundColor: currentPrimary,
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                              minimumSize: Size.zero,
+                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                              backgroundColor: currentPrimary.withValues(alpha: 0.08),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+
+                      if (fetchedModels.isNotEmpty) ...[
+                        Container(
+                          margin: const EdgeInsets.only(bottom: 8),
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+                          decoration: BoxDecoration(
+                            border: Border.all(
+                              color: isDark ? const Color(0xFF333A4D) : const Color(0xFFCBD5E1),
+                            ),
+                            borderRadius: BorderRadius.circular(12),
+                            color: isDark ? const Color(0xFF151821) : const Color(0xFFF8FAFC),
+                          ),
+                          child: DropdownButtonHideUnderline(
+                            child: DropdownButton<String>(
+                              value: fetchedModels.contains(modelController.text.trim())
+                                  ? modelController.text.trim()
+                                  : null,
+                              hint: Text(
+                                modelController.text.trim().isEmpty
+                                    ? 'Pilih model hasil fetch'
+                                    : modelController.text.trim(),
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  color: isDark ? Colors.white70 : Colors.black87,
+                                ),
+                              ),
+                              isExpanded: true,
+                              icon: const Icon(Icons.keyboard_arrow_down_rounded),
+                              items: fetchedModels.map((id) {
+                                return DropdownMenuItem<String>(
+                                  value: id,
+                                  child: Text(
+                                    id,
+                                    style: const TextStyle(fontSize: 13),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                );
+                              }).toList(),
+                              onChanged: (value) {
+                                if (value != null) {
+                                  setState(() {
+                                    modelController.text = value;
+                                  });
+                                }
+                              },
+                            ),
+                          ),
+                        ),
+                      ],
+
+                      TextField(
+                        controller: modelController,
+                        decoration: InputDecoration(
+                          hintText: 'Nama model (contoh: gpt-4o-mini)',
+                          hintStyle: const TextStyle(fontSize: 12),
+                          prefixIcon: const Icon(Icons.memory_rounded, size: 20),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 12,
+                          ),
+                        ),
+                        style: const TextStyle(fontSize: 13),
+                      ),
+                      const SizedBox(height: 22),
+
+                      // Dialog buttons
+                      Row(
+                        children: [
+                          Expanded(
+                            child: OutlinedButton(
+                              onPressed: () => Navigator.pop(dialogContext),
+                              style: OutlinedButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(vertical: 13),
+                                side: BorderSide(
+                                  color: isDark ? const Color(0xFF333A4D) : const Color(0xFFE2E8F0),
+                                  width: 1.5,
+                                ),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(14),
+                                ),
+                              ),
+                              child: Text(
+                                'Batal',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
+                                  color: isDark ? const Color(0xFFCBD5E1) : const Color(0xFF64748B),
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: ElevatedButton(
+                              onPressed: () async {
+                                final modelValue = modelController.text.trim().isEmpty
+                                    ? AppConstants.defaultAiModel
+                                    : modelController.text.trim();
+                                await userProvider.updateProfile(
+                                  aiApiKey: apiKeyController.text.trim(),
+                                  aiModel: modelValue,
+                                  aiCustomBaseUrl: endpointController.text.trim(),
+                                );
+                                if (dialogContext.mounted) {
+                                  Navigator.pop(dialogContext);
+                                  SnackBarHelper.showSuccess(
+                                    dialogContext,
+                                    'Pengaturan AI berhasil disimpan',
+                                  );
+                                }
+                              },
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: currentPrimary,
+                                foregroundColor: Colors.white,
+                                elevation: 0,
+                                padding: const EdgeInsets.symmetric(vertical: 13),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(14),
+                                ),
+                              ),
+                              child: const Text(
+                                'Simpan',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.white,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                   ),
-                  const SizedBox(height: 6),
-
-                  if (fetchedModels.isNotEmpty) ...[
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12),
-                      decoration: BoxDecoration(
-                        border: Border.all(color: Colors.grey.shade300),
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: DropdownButton<String>(
-                        value: fetchedModels.contains(modelController.text.trim())
-                            ? modelController.text.trim()
-                            : null,
-                        hint: Text(
-                          modelController.text.trim().isEmpty
-                              ? 'Pilih dari model yang ditemukan'
-                              : modelController.text.trim(),
-                          style: const TextStyle(fontSize: 13),
-                        ),
-                        isExpanded: true,
-                        underline: const SizedBox(),
-                        items: fetchedModels.map((id) {
-                          return DropdownMenuItem<String>(
-                            value: id,
-                            child: Text(
-                              id,
-                              style: const TextStyle(fontSize: 13),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          );
-                        }).toList(),
-                        onChanged: (value) {
-                          if (value != null) {
-                            setState(() {
-                              modelController.text = value;
-                            });
-                          }
-                        },
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                  ],
-
-                  TextField(
-                    controller: modelController,
-                    decoration: InputDecoration(
-                      hintText: 'Contoh: gpt-4o-mini / deepseek-chat',
-                      hintStyle: const TextStyle(fontSize: 12),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 12,
-                      ),
-                    ),
-                    style: const TextStyle(fontSize: 13),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Pilih dari hasil "Fetch Model" atau ketik nama model secara manual.',
-                    style: TextStyle(color: Colors.grey[600], fontSize: 11),
-                  ),
-                ],
+                ),
               ),
             ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(dialogContext),
-                child: const Text('Batal'),
-              ),
-              ElevatedButton(
-                onPressed: () async {
-                  final modelValue = modelController.text.trim().isEmpty
-                      ? AppConstants.defaultAiModel
-                      : modelController.text.trim();
-                  await userProvider.updateProfile(
-                    aiApiKey: apiKeyController.text.trim(),
-                    aiModel: modelValue,
-                    aiCustomBaseUrl: endpointController.text.trim(),
-                  );
-                  if (dialogContext.mounted) {
-                    Navigator.pop(dialogContext);
-                    SnackBarHelper.showSuccess(
-                      this.context,
-                      'Pengaturan AI OpenAI-Compatible berhasil disimpan',
-                    );
-                  }
-                },
-                child: const Text('Simpan'),
-              ),
-            ],
           );
         },
       ),

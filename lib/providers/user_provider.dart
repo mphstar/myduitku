@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import '../models/models.dart';
-import '../services/database_service.dart';
-import '../core/theme.dart';
+import '../services/services.dart';
 
 /// Provider for managing user profile
 class UserProvider extends ChangeNotifier {
