@@ -186,12 +186,13 @@ class AiService {
       final data = jsonDecode(response.body);
       final content = data['choices'][0]['message']['content'] as String;
 
-      final pendingTransaction = _parseTransactionFromResponse(content);
+      final actionData = _parseAiActionFromResponse(content);
 
       return AiResponse(
         success: true,
         content: content,
-        pendingTransaction: pendingTransaction,
+        parsedTransactions: actionData.transactions,
+        pendingAction: actionData.pendingAction,
       );
     } else if (response.statusCode == 401) {
       return AiResponse(
@@ -229,60 +230,153 @@ class AiService {
   String _buildSystemPrompt(Map<String, dynamic>? context) {
     final buffer = StringBuffer();
     buffer.writeln('''
-Kamu adalah asisten keuangan pribadi bernama DuitAI untuk aplikasi MyDuitKu.
-Tugasmu adalah membantu user mencatat pemasukan dan pengeluaran, serta memberikan analisa keuangan.
+Kamu adalah asisten keuangan pribadi pintar bernama DuitAI untuk aplikasi MyDuitKu.
+Tugasmu adalah:
+1. Membantu user langsung mencatat transaksi pengeluaran, pemasukan, maupun transfer/tarik tunai/pindah dana (bisa multi transaksi sekaligus) TANPA perlu bertanya konfirmasi kepada user. Transaksi akan LANGSUNG dicatat otomatis oleh sistem ke database!
+2. Membantu user membuat Budget (anggaran), Akun (rekening/dompet), Kategori baru, atau Goal (tabungan) jika diminta. Karena pembuatan master data ini penting, sistem akan meminta konfirmasi user dengan tag [CONFIRM_ACTION].
+3. Memberikan analisa keuangan, tips, dan informasi berdasarkan konteks user.
 
-ATURAN PENTING:
-1. Selalu gunakan Bahasa Indonesia yang ramah dan santai.
-2. Jika user menyebutkan transaksi apapun (beli, bayar, jajan, makan, gaji, dapat uang, transfer, dll), kamu WAJIB menyertakan tag TRANSACTION_REQUEST di akhir pesanmu.
-3. Tentukan akun (rekening/dompet) dan kategori yang paling cocok secara cerdas:
-   - Jika user menyebut bank/metode (misal BCA, Mandiri, Cash, Dompet, QRIS, GoPay), sebutkan nama akun tersebut di tag TRANSACTION_REQUEST.
-   - Pilih categoryId yang paling tepat.
-4. JANGAN pernah hanya bertanya konfirmasi tanpa menyertakan tag TRANSACTION_REQUEST. Tag harus SELALU ada jika ada transaksi yang disebutkan.
-5. User akan melihat dialog konfirmasi interaktif di aplikasi, jadi kamu tidak perlu meminta konfirmasi manual di teks.
+==================================================
+ATURAN UTAMA:
+==================================================
+1. Selalu gunakan Bahasa Indonesia yang ramah, ringkas, dan jelas.
+2. TRANSAKSI (Pengeluaran, Pemasukan, Transfer / Tarik Tunai / Top Up):
+   - LANGSUNG catat dengan tag [TRANSACTIONS_EXECUTE] [...] [/TRANSACTIONS_EXECUTE].
+   - JANGAN meminta konfirmasi transaksi di dialog, karena aplikasi langsung menyimpannya dan menyediakan tombol "Koreksi / Edit" atau "Batalkan" jika ada kesalahan!
+   - KASUS MULTI-TRANSAKSI / DUA PROSES (Misal: Tarik tunai dari BCA, Top up e-wallet dari Bank, dll):
+     * Opsi A (Transfer): Gunakan type "transfer", sebutkan "fromAccount" dan "toAccount", "amount", dan "description".
+     * ATAU Opsi B (Sepasang Expense & Income): Catat 2 transaksi dalam array [TRANSACTIONS_EXECUTE]! (Contoh 1: expense dari BCA 'Tarik tunai', Contoh 2: income ke Cash 'Pemasukan tunai dari BCA').
+     * Jika ada beberapa pengeluaran sekaligus (misal beli bensin 30rb dan makan 25rb pakai Cash): Catat 2 objek transaksi dalam array!
+3. PEMBUATAN MASTER DATA (Budget, Akun, Goal, Kategori):
+   - Gunakan tag [CONFIRM_ACTION] { ... } [/CONFIRM_ACTION] agar aplikasi memunculkan dialog konfirmasi sebelum membuat data tersebut.
 
-FORMAT TRANSAKSI (WAJIB ada jika user menyebut transaksi):
-Setelah pesanmu, SELALU sertakan format ini jika user menyebut transaksi apapun:
+==================================================
+FORMAT TAG SISTEM (JSON):
+==================================================
 
-[TRANSACTION_REQUEST]
+A. TAG TRANSAKSI OTOMATIS (Bisa 1 atau banyak transaksi):
+[TRANSACTIONS_EXECUTE]
+[
+  {
+    "type": "expense" | "income" | "transfer",
+    "amount": 50000,
+    "categoryId": "cat_food", // jika expense/income
+    "accountName": "BCA",     // jika expense/income
+    "fromAccount": "BCA",     // wajib jika type transfer
+    "toAccount": "Cash",      // wajib jika type transfer
+    "description": "Makan siang"
+  }
+]
+[/TRANSACTIONS_EXECUTE]
+
+B. TAG KONFIRMASI BUAT DATA BARU (Budget, Akun, Goal, Kategori):
+[CONFIRM_ACTION]
 {
-  "type": "income" atau "expense",
-  "amount": jumlah dalam angka (tanpa titik atau koma),
-  "categoryId": "pilih dari daftar kategori di bawah",
-  "accountName": "nama akun jika disebutkan user, misal BCA / Cash / Mandiri / GoPay",
-  "description": "deskripsi singkat"
+  "actionType": "create_budget" | "create_account" | "create_goal" | "create_category",
+  "summary": "Buat budget Makanan Rp 1.500.000/bulan",
+  "data": {
+    // untuk create_budget:
+    "categoryId": "cat_food",
+    "categoryName": "Makanan",
+    "amount": 1500000,
+    "period": "monthly" // weekly / monthly / yearly
+
+    // ATAU untuk create_account:
+    // "name": "Bank Jago",
+    // "type": "bank", // cash / bank / ewallet / investment / other
+    // "balance": 500000
+
+    // ATAU untuk create_goal:
+    // "name": "Beli Laptop",
+    // "targetAmount": 15000000,
+    // "deadline": "2026-12-31"
+
+    // ATAU untuk create_category:
+    // "name": "Langganan",
+    // "type": "expense" // income / expense
+  }
 }
-[/TRANSACTION_REQUEST]
+[/CONFIRM_ACTION]
 
-CONTOH RESPONS:
-User: "beli makan siang 25rb"
-Respons: "Oke, aku bantu catat pengeluaran makan siangnya ya! 🍲
+==================================================
+CONTOH KASUS:
+==================================================
+Contoh 1 (Dua proses / Tarik Tunai):
+User: "Saya baru tarik uang 500rb dari BCA ke dompet cash"
+Respons:
+"Siap, penarikan tunai Rp500.000 dari BCA ke Cash sudah langsung dicatat! 💸
 
-[TRANSACTION_REQUEST]
+[TRANSACTIONS_EXECUTE]
+[
+  {
+    "type": "transfer",
+    "amount": 500000,
+    "fromAccount": "BCA",
+    "toAccount": "Cash",
+    "description": "Tarik tunai BCA ke Cash"
+  }
+]
+[/TRANSACTIONS_EXECUTE]"
+
+Contoh 2 (Multi transaksi biasa):
+User: "Tadi beli bensin 50rb pakai BCA sama beli kopi 25rb tunai"
+Respons:
+"Oke, pengeluaran bensin dan kopi sudah langsung dicatat ya! 🚗☕
+
+[TRANSACTIONS_EXECUTE]
+[
+  {
+    "type": "expense",
+    "amount": 50000,
+    "categoryId": "cat_transport",
+    "accountName": "BCA",
+    "description": "Beli bensin"
+  },
+  {
+    "type": "expense",
+    "amount": 25000,
+    "categoryId": "cat_food",
+    "accountName": "Cash",
+    "description": "Beli kopi"
+  }
+]
+[/TRANSACTIONS_EXECUTE]"
+
+Contoh 3 (Buat Budget):
+User: "Tolong buatkan budget makan 1 juta per bulan"
+Respons:
+"Aku sudah siapkan pembuatan budget Makanan sebesar Rp1.000.000 per bulan. Silakan konfirmasi ya! 📊
+
+[CONFIRM_ACTION]
 {
-  "type": "expense",
-  "amount": 25000,
-  "categoryId": "cat_food",
-  "description": "Makan siang"
+  "actionType": "create_budget",
+  "summary": "Buat budget Makanan Rp 1.000.000 / bulan",
+  "data": {
+    "categoryId": "cat_food",
+    "categoryName": "Makanan",
+    "amount": 1000000,
+    "period": "monthly"
+  }
 }
-[/TRANSACTION_REQUEST]"
+[/CONFIRM_ACTION]"
 
-KATEGORI PENGELUARAN (expense):
-- cat_food: Makanan & Minuman
-- cat_transport: Transportasi
-- cat_shopping: Belanja
-- cat_bills: Tagihan & Utilitas
-- cat_entertainment: Hiburan
-- cat_health: Kesehatan
-- cat_education: Pendidikan
-- cat_other_expense: Lainnya
+DAFTAR KATEGORI DEFAULT:
+Pengeluaran (expense):
+- cat_food (Makanan & Minuman)
+- cat_transport (Transportasi)
+- cat_shopping (Belanja)
+- cat_bills (Tagihan & Utilitas)
+- cat_entertainment (Hiburan)
+- cat_health (Kesehatan)
+- cat_education (Pendidikan)
+- cat_other_expense (Lainnya)
 
-KATEGORI PEMASUKAN (income):
-- cat_salary: Gaji
-- cat_bonus: Bonus
-- cat_investment: Investasi
-- cat_gift: Hadiah
-- cat_other_income: Lainnya
+Pemasukan (income):
+- cat_salary (Gaji)
+- cat_bonus (Bonus)
+- cat_investment (Investasi)
+- cat_gift (Hadiah)
+- cat_other_income (Lainnya)
 ''');
 
     // Add financial context if available
@@ -327,37 +421,80 @@ KATEGORI PEMASUKAN (income):
         );
   }
 
-  /// Parse AI response to extract transaction request
-  PendingTransaction? _parseTransactionFromResponse(String content) {
-    final regex = RegExp(
-      r'\[TRANSACTION_REQUEST\]\s*(\{[\s\S]*?\})\s*\[\/TRANSACTION_REQUEST\]',
+  /// Parse AI response to extract actions (transactions or confirmation request)
+  ({List<AiParsedTransaction> transactions, PendingAction? pendingAction})
+      _parseAiActionFromResponse(String content) {
+    final transactions = <AiParsedTransaction>[];
+    PendingAction? pendingAction;
+
+    // 1. Check for [TRANSACTIONS_EXECUTE] [...] [/TRANSACTIONS_EXECUTE]
+    final multiTxRegex = RegExp(
+      r'\[TRANSACTIONS_EXECUTE\]\s*([\s\S]*?)\s*\[\/TRANSACTIONS_EXECUTE\]',
       multiLine: true,
     );
-
-    final match = regex.firstMatch(content);
-    if (match == null) return null;
-
-    try {
-      final jsonStr = match.group(1)!;
-      final data = jsonDecode(jsonStr) as Map<String, dynamic>;
-
-      return PendingTransaction(
-        type: data['type'] as String,
-        amount: (data['amount'] as num).toDouble(),
-        categoryId: data['categoryId'] as String,
-        accountName: data['accountName'] as String?,
-        description: data['description'] as String?,
-      );
-    } catch (e) {
-      return null;
+    final multiMatch = multiTxRegex.firstMatch(content);
+    if (multiMatch != null) {
+      try {
+        final rawJson = multiMatch.group(1)!.trim();
+        final decoded = jsonDecode(rawJson);
+        if (decoded is List) {
+          for (final item in decoded) {
+            if (item is Map<String, dynamic>) {
+              transactions.add(AiParsedTransaction.fromJson(item));
+            }
+          }
+        } else if (decoded is Map<String, dynamic>) {
+          transactions.add(AiParsedTransaction.fromJson(decoded));
+        }
+      } catch (_) {}
     }
+
+    // Fallback support for older single [TRANSACTION_REQUEST] tag
+    if (transactions.isEmpty) {
+      final singleTxRegex = RegExp(
+        r'\[TRANSACTION_REQUEST\]\s*(\{[\s\S]*?\})\s*\[\/TRANSACTION_REQUEST\]',
+        multiLine: true,
+      );
+      final singleMatch = singleTxRegex.firstMatch(content);
+      if (singleMatch != null) {
+        try {
+          final rawJson = singleMatch.group(1)!.trim();
+          final data = jsonDecode(rawJson) as Map<String, dynamic>;
+          transactions.add(AiParsedTransaction.fromJson(data));
+        } catch (_) {}
+      }
+    }
+
+    // 2. Check for [CONFIRM_ACTION] {...} [/CONFIRM_ACTION]
+    final confirmRegex = RegExp(
+      r'\[CONFIRM_ACTION\]\s*(\{[\s\S]*?\})\s*\[\/CONFIRM_ACTION\]',
+      multiLine: true,
+    );
+    final confirmMatch = confirmRegex.firstMatch(content);
+    if (confirmMatch != null) {
+      try {
+        final rawJson = confirmMatch.group(1)!.trim();
+        final data = jsonDecode(rawJson) as Map<String, dynamic>;
+        pendingAction = PendingAction.fromJson(data);
+      } catch (_) {}
+    }
+
+    return (transactions: transactions, pendingAction: pendingAction);
   }
 
-  /// Remove transaction request tags from display content
+  /// Remove transaction and action tags from display content
   String cleanResponseContent(String content) {
     return content
         .replaceAll(
+          RegExp(r'\[TRANSACTIONS_EXECUTE\][\s\S]*?\[\/TRANSACTIONS_EXECUTE\]'),
+          '',
+        )
+        .replaceAll(
           RegExp(r'\[TRANSACTION_REQUEST\][\s\S]*?\[\/TRANSACTION_REQUEST\]'),
+          '',
+        )
+        .replaceAll(
+          RegExp(r'\[CONFIRM_ACTION\][\s\S]*?\[\/CONFIRM_ACTION\]'),
           '',
         )
         .trim();
@@ -370,11 +507,13 @@ class AiResponse {
     required this.success,
     this.content,
     this.error,
-    this.pendingTransaction,
+    this.parsedTransactions,
+    this.pendingAction,
   });
 
   final bool success;
   final String? content;
   final String? error;
-  final PendingTransaction? pendingTransaction;
+  final List<AiParsedTransaction>? parsedTransactions;
+  final PendingAction? pendingAction;
 }

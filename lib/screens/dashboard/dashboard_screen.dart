@@ -6,6 +6,7 @@ import '../../core/constants.dart';
 import '../../models/models.dart';
 import '../../providers/providers.dart';
 import '../../widgets/common_widgets.dart';
+import '../../widgets/user_avatar.dart';
 import '../budget/budget_screen.dart';
 import '../goals/goals_screen.dart';
 import '../profile/profile_screen.dart';
@@ -172,27 +173,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       MaterialPageRoute(builder: (context) => const ProfileScreen()),
                     );
                   },
-                  child: Container(
-                    width: 40,
-                    height: 40,
-                    decoration: BoxDecoration(
-                      color: Theme.of(context).primaryColor.withValues(alpha: 0.12),
-                      shape: BoxShape.circle,
-                      border: Border.all(
-                        color: Theme.of(context).primaryColor.withValues(alpha: 0.2),
-                        width: 1.5,
-                      ),
-                    ),
-                    child: Center(
-                      child: Text(
-                        userName.isNotEmpty ? userName[0].toUpperCase() : 'U',
-                        style: TextStyle(
-                          color: Theme.of(context).primaryColor,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 16,
-                        ),
-                      ),
-                    ),
+                  child: UserAvatar(
+                    name: userName,
+                    radius: 20,
                   ),
                 ),
               ],

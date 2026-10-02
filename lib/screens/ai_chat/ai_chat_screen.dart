@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -10,8 +12,8 @@ import '../../core/constants.dart';
 import '../../models/models.dart';
 import '../../providers/providers.dart';
 import '../../widgets/common_widgets.dart';
+import '../../widgets/user_avatar.dart';
 import '../profile/profile_screen.dart';
-import '../transactions/transactions_screen.dart';
 
 class AiChatScreen extends StatefulWidget {
   const AiChatScreen({super.key});
@@ -280,13 +282,16 @@ class _AiChatScreenState extends State<AiChatScreen> {
       imageBase64: image,
       customBaseUrl: userProvider.profile.aiCustomBaseUrl,
       financialContext: financialContext,
+      transactionProvider: transactionProvider,
+      accountProvider: accountProvider,
+      categoryProvider: categoryProvider,
     );
 
     _scrollToBottom();
 
-    // Check if there's a pending transaction
-    if (aiChatProvider.hasPendingTransaction) {
-      _showTransactionConfirmation(aiChatProvider.pendingTransaction!);
+    // Check if there is any pending action for master data (Budget, Account, Goal, Category)
+    if (aiChatProvider.hasPendingAction) {
+      _showMasterDataConfirmation(aiChatProvider.pendingAction!);
     }
   }
 
@@ -319,56 +324,171 @@ class _AiChatScreenState extends State<AiChatScreen> {
     );
   }
 
-  void _showTransactionConfirmation(PendingTransaction transaction) {
-    final categoryProvider = context.read<CategoryProvider>();
+  void _showMasterDataConfirmation(PendingAction action) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (sheetContext) => Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade300,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: AppColors.primary.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(
+                    Icons.assignment_turned_in_rounded,
+                    color: AppColors.primary,
+                    size: 20,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                const Text(
+                  'Konfirmasi Pembuatan Data',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.grey.shade50,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: Colors.grey.shade200),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    action.summary,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 15,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'AI meminta izin untuk membuat data di atas ke akun Anda. Setujui untuk memproses.',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 24),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: () async {
+                      Navigator.pop(sheetContext);
+                      await this.context.read<AiChatProvider>().rejectPendingAction();
+                    },
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    child: const Text('Tolak'),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  flex: 2,
+                  child: ElevatedButton(
+                    onPressed: () async {
+                      Navigator.pop(sheetContext);
+                      final success = await this.context
+                          .read<AiChatProvider>()
+                          .confirmPendingAction(
+                            budgetProvider: this.context.read<BudgetProvider>(),
+                            accountProvider: this.context.read<AccountProvider>(),
+                            goalProvider: this.context.read<GoalProvider>(),
+                            categoryProvider: this.context.read<CategoryProvider>(),
+                          );
+                      if (success && mounted) {
+                        SnackBarHelper.showSuccess(
+                          this.context,
+                          'Data berhasil dibuat!',
+                        );
+                      }
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primary,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    child: const Text('Setujui & Buat'),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showEditTransactionSheet(ExecutedActionItem item) {
+    if (item.transactionId == null) return;
+    final txProvider = context.read<TransactionProvider>();
     final accountProvider = context.read<AccountProvider>();
+    final categoryProvider = context.read<CategoryProvider>();
 
-    final categories = transaction.isIncome
-        ? categoryProvider.incomeCategories
-        : categoryProvider.expenseCategories;
-
-    // Check matching account (by accountName from AI or description)
-    String selectedAccountId = accountProvider.accounts.isNotEmpty
-        ? accountProvider.accounts.first.id
-        : '';
-    final targetAccountName = (transaction.accountName ?? transaction.description ?? '').toLowerCase();
-
-    for (final acc in accountProvider.accounts) {
-      if (targetAccountName.contains(acc.name.toLowerCase()) ||
-          acc.name.toLowerCase().contains(targetAccountName)) {
-        selectedAccountId = acc.id;
-        break;
-      }
+    final tx = txProvider.getTransactionById(item.transactionId!);
+    if (tx == null) {
+      SnackBarHelper.showError(context, 'Transaksi tidak ditemukan atau sudah dihapus.');
+      return;
     }
 
-    String selectedCategoryId = transaction.categoryId;
-    if (!categories.any((c) => c.id == selectedCategoryId)) {
-      selectedCategoryId = categories.isNotEmpty ? categories.first.id : '';
-    }
-
-    final isIncome = transaction.isIncome;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final amountController = TextEditingController(
+      text: tx.amount.toStringAsFixed(0),
+    );
+    final descController = TextEditingController(
+      text: tx.description ?? '',
+    );
+    String selectedAccountId = tx.accountId;
+    String selectedCategoryId = tx.categoryId;
+    TransactionType selectedType = tx.type;
 
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: isDark ? const Color(0xFF1E222D) : Colors.white,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
-      builder: (sheetContext) => StatefulBuilder(
+      builder: (sheetCtx) => StatefulBuilder(
         builder: (context, setState) {
-          final selectedAccount = accountProvider.accounts.firstWhere(
-            (a) => a.id == selectedAccountId,
-            orElse: () => accountProvider.accounts.isNotEmpty
-                ? accountProvider.accounts.first
-                : Account(
-                    id: '',
-                    name: 'Belum ada akun',
-                    type: AccountType.cash,
-                    balance: 0,
-                  ),
-          );
+          final categories = selectedType == TransactionType.income
+              ? categoryProvider.incomeCategories
+              : categoryProvider.expenseCategories;
 
           return Padding(
             padding: EdgeInsets.fromLTRB(
@@ -382,7 +502,6 @@ class _AiChatScreenState extends State<AiChatScreen> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Drag handle
                   Center(
                     child: Container(
                       width: 40,
@@ -394,267 +513,65 @@ class _AiChatScreenState extends State<AiChatScreen> {
                     ),
                   ),
                   const SizedBox(height: 16),
-
-                  // Header Badge
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Row(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.all(8),
-                            decoration: BoxDecoration(
-                              color: (isIncome ? AppColors.success : AppColors.error)
-                                  .withValues(alpha: 0.12),
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            child: Icon(
-                              isIncome
-                                  ? Icons.arrow_downward_rounded
-                                  : Icons.arrow_upward_rounded,
-                              color: isIncome ? AppColors.success : AppColors.error,
-                              size: 18,
-                            ),
-                          ),
-                          const SizedBox(width: 10),
-                          Text(
-                            isIncome ? 'Konfirmasi Pemasukan' : 'Konfirmasi Pengeluaran',
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 16,
-                              color: AppColors.textPrimary,
-                            ),
-                          ),
-                        ],
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.close_rounded, size: 20),
-                        onPressed: () async {
-                          Navigator.pop(sheetContext);
-                          await this.context.read<AiChatProvider>().rejectTransaction();
-                        },
-                      ),
-                    ],
+                  const Text(
+                    'Koreksi / Edit Transaksi',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                   ),
                   const SizedBox(height: 14),
-
-                  // Amount Highlight Card
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                    decoration: BoxDecoration(
-                      color: (isIncome ? AppColors.success : AppColors.error)
-                          .withValues(alpha: 0.08),
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(
-                        color: (isIncome ? AppColors.success : AppColors.error)
-                            .withValues(alpha: 0.2),
-                      ),
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          'Jumlah Transaksi',
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: AppColors.textSecondary,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                        Text(
-                          CurrencyFormatter.format(transaction.amount),
-                          style: TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
-                            color: isIncome ? AppColors.success : AppColors.error,
-                          ),
-                        ),
-                      ],
+                  TextField(
+                    controller: amountController,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(
+                      labelText: 'Nominal (Rp)',
+                      prefixText: 'Rp ',
                     ),
                   ),
-                  const SizedBox(height: 16),
-
-                  // Account Selector Header
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text(
-                        'Rekening / Akun',
-                        style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
-                      ),
-                      TextButton.icon(
-                        onPressed: () async {
-                          final newAcc = await _showInlineAddAccount(context);
-                          if (newAcc != null) {
-                            setState(() {
-                              selectedAccountId = newAcc.id;
-                            });
-                          }
-                        },
-                        icon: const Icon(Icons.add_rounded, size: 14),
-                        label: const Text('Buat Akun Baru', style: TextStyle(fontSize: 12)),
-                        style: TextButton.styleFrom(
-                          foregroundColor: AppColors.primary,
-                          padding: EdgeInsets.zero,
-                          minimumSize: Size.zero,
-                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                        ),
-                      ),
-                    ],
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<String>(
+                    value: accountProvider.accounts.any((a) => a.id == selectedAccountId)
+                        ? selectedAccountId
+                        : (accountProvider.accounts.isNotEmpty ? accountProvider.accounts.first.id : null),
+                    decoration: const InputDecoration(labelText: 'Akun / Rekening'),
+                    items: accountProvider.accounts.map((a) {
+                      return DropdownMenuItem(
+                        value: a.id,
+                        child: Text('${a.name} (${CurrencyFormatter.format(a.balance)})'),
+                      );
+                    }).toList(),
+                    onChanged: (val) {
+                      if (val != null) setState(() => selectedAccountId = val);
+                    },
                   ),
-                  const SizedBox(height: 6),
-
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                    decoration: BoxDecoration(
-                      border: Border.all(color: Colors.grey.shade300),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: DropdownButton<String>(
-                      value: accountProvider.accounts.any((a) => a.id == selectedAccountId)
-                          ? selectedAccountId
-                          : (accountProvider.accounts.isNotEmpty ? accountProvider.accounts.first.id : null),
-                      isExpanded: true,
-                      underline: const SizedBox(),
-                      hint: const Text('Pilih akun', style: TextStyle(fontSize: 13)),
-                      items: accountProvider.accounts.map((account) {
-                        return DropdownMenuItem<String>(
-                          value: account.id,
-                          child: Row(
-                            children: [
-                              Icon(
-                                AppIcons.getIcon(account.icon ?? 'account_balance_wallet'),
-                                size: 18,
-                                color: Color(account.color ?? 0xFF00B8A9),
-                              ),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: Text(
-                                  '${account.name} (${CurrencyFormatter.format(account.balance)})',
-                                  style: const TextStyle(fontSize: 13),
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                            ],
-                          ),
-                        );
-                      }).toList(),
-                      onChanged: (value) {
-                        if (value != null) {
-                          setState(() => selectedAccountId = value);
-                        }
-                      },
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<String>(
+                    value: categories.any((c) => c.id == selectedCategoryId)
+                        ? selectedCategoryId
+                        : (categories.isNotEmpty ? categories.first.id : null),
+                    decoration: const InputDecoration(labelText: 'Kategori'),
+                    items: categories.map((c) {
+                      return DropdownMenuItem(
+                        value: c.id,
+                        child: Text(c.name),
+                      );
+                    }).toList(),
+                    onChanged: (val) {
+                      if (val != null) setState(() => selectedCategoryId = val);
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: descController,
+                    decoration: const InputDecoration(
+                      labelText: 'Deskripsi / Catatan',
                     ),
                   ),
-                  const SizedBox(height: 16),
-
-                  // Category Selector Header
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text(
-                        'Kategori',
-                        style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
-                      ),
-                      TextButton.icon(
-                        onPressed: () async {
-                          final newCat = await TransactionsScreen.showInlineAddCategoryDialog(
-                            context,
-                            isIncome ? TransactionType.income : TransactionType.expense,
-                          );
-                          if (newCat != null) {
-                            setState(() {
-                              selectedCategoryId = newCat.id;
-                            });
-                          }
-                        },
-                        icon: const Icon(Icons.add_rounded, size: 14),
-                        label: const Text('Buat Kategori Baru', style: TextStyle(fontSize: 12)),
-                        style: TextButton.styleFrom(
-                          foregroundColor: AppColors.primary,
-                          padding: EdgeInsets.zero,
-                          minimumSize: Size.zero,
-                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 6),
-
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                    decoration: BoxDecoration(
-                      border: Border.all(color: Colors.grey.shade300),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: DropdownButton<String>(
-                      value: categories.any((c) => c.id == selectedCategoryId)
-                          ? selectedCategoryId
-                          : (categories.isNotEmpty ? categories.first.id : null),
-                      isExpanded: true,
-                      underline: const SizedBox(),
-                      hint: const Text('Pilih kategori', style: TextStyle(fontSize: 13)),
-                      items: categories.map((category) {
-                        return DropdownMenuItem<String>(
-                          value: category.id,
-                          child: Row(
-                            children: [
-                              Icon(
-                                AppIcons.getIcon(category.icon),
-                                size: 18,
-                                color: Color(category.color),
-                              ),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: Text(
-                                  category.name,
-                                  style: const TextStyle(fontSize: 13),
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                            ],
-                          ),
-                        );
-                      }).toList(),
-                      onChanged: (value) {
-                        if (value != null) {
-                          setState(() => selectedCategoryId = value);
-                        }
-                      },
-                    ),
-                  ),
-
-                  // Description note
-                  if (transaction.description != null && transaction.description!.isNotEmpty) ...[
-                    const SizedBox(height: 14),
-                    Text(
-                      'Catatan: ${transaction.description}',
-                      style: TextStyle(
-                        color: AppColors.textSecondary,
-                        fontSize: 12,
-                        fontStyle: FontStyle.italic,
-                      ),
-                    ),
-                  ],
-                  const SizedBox(height: 22),
-
-                  // Action Buttons
+                  const SizedBox(height: 20),
                   Row(
                     children: [
                       Expanded(
                         child: OutlinedButton(
-                          onPressed: () async {
-                            Navigator.pop(sheetContext);
-                            await this.context.read<AiChatProvider>().rejectTransaction();
-                          },
-                          style: OutlinedButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(vertical: 12),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                          ),
-                          child: const Text('Batalkan'),
+                          onPressed: () => Navigator.pop(sheetCtx),
+                          child: const Text('Batal'),
                         ),
                       ),
                       const SizedBox(width: 12),
@@ -662,40 +579,38 @@ class _AiChatScreenState extends State<AiChatScreen> {
                         flex: 2,
                         child: ElevatedButton(
                           onPressed: () async {
-                            final targetAccountId = selectedAccountId.isNotEmpty
-                                ? selectedAccountId
-                                : (accountProvider.accounts.isNotEmpty ? accountProvider.accounts.first.id : '');
+                            final newAmount = double.tryParse(
+                              amountController.text.replaceAll(RegExp(r'[^0-9]'), ''),
+                            ) ?? tx.amount;
 
-                            if (targetAccountId.isEmpty) {
-                              SnackBarHelper.showError(context, 'Pilih atau buat akun terlebih dahulu');
-                              return;
-                            }
+                            // Revert previous balance impact
+                            await accountProvider.revertBalance(tx.accountId, tx.amount, tx.type);
 
-                            Navigator.pop(sheetContext);
-                            final success = await this.context
-                                .read<AiChatProvider>()
-                                .confirmTransaction(
-                                  transactionProvider:
-                                      this.context.read<TransactionProvider>(),
-                                  accountProvider: this.context.read<AccountProvider>(),
-                                  accountId: targetAccountId,
-                                  categoryId: selectedCategoryId,
-                                );
-                            if (success && mounted) {
+                            // Update transaction
+                            final updatedTx = tx.copyWith(
+                              amount: newAmount,
+                              accountId: selectedAccountId,
+                              categoryId: selectedCategoryId,
+                              description: descController.text.trim(),
+                            );
+                            await txProvider.updateTransaction(updatedTx);
+
+                            // Apply new balance impact
+                            await accountProvider.updateBalance(
+                              selectedAccountId,
+                              newAmount,
+                              selectedType,
+                            );
+
+                            if (sheetCtx.mounted) {
+                              Navigator.pop(sheetCtx);
                               SnackBarHelper.showSuccess(
                                 this.context,
-                                'Transaksi berhasil dicatat ke ${selectedAccount.name}!',
+                                'Transaksi berhasil dikoreksi!',
                               );
                             }
                           },
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: AppColors.primary,
-                            padding: const EdgeInsets.symmetric(vertical: 12),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                          ),
-                          child: const Text('Konfirmasi & Simpan'),
+                          child: const Text('Simpan Koreksi'),
                         ),
                       ),
                     ],
@@ -937,6 +852,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
   Widget _buildMessageBubble(ChatMessage message) {
     final isUser = message.role == ChatRole.user;
     final primaryColor = Theme.of(context).primaryColor;
+    final userName = context.read<UserProvider>().profile.name;
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
@@ -955,9 +871,9 @@ class _AiChatScreenState extends State<AiChatScreen> {
           ],
           Flexible(
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
               decoration: BoxDecoration(
-                color: isUser ? primaryColor : Colors.grey[200],
+                color: isUser ? primaryColor : Colors.grey[100],
                 borderRadius: BorderRadius.only(
                   topLeft: const Radius.circular(16),
                   topRight: const Radius.circular(16),
@@ -981,23 +897,200 @@ class _AiChatScreenState extends State<AiChatScreen> {
                     ),
                     if (message.content.isNotEmpty) const SizedBox(height: 8),
                   ],
-                  if (message.content.isNotEmpty)
-                    Text(
-                      message.content,
-                      style: TextStyle(
-                        color: isUser ? Colors.white : Colors.black87,
+                  if (message.content.isNotEmpty) ...[
+                    if (isUser)
+                      SelectableText(
+                        message.content,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 14,
+                        ),
+                      )
+                    else
+                      MarkdownBody(
+                        data: message.content,
+                        selectable: true,
+                        styleSheet: MarkdownStyleSheet(
+                          p: const TextStyle(
+                            color: Colors.black87,
+                            fontSize: 14,
+                            height: 1.4,
+                          ),
+                          strong: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: Colors.black,
+                          ),
+                          code: TextStyle(
+                            backgroundColor: Colors.grey.shade200,
+                            fontFamily: 'monospace',
+                            fontSize: 12,
+                          ),
+                          codeblockDecoration: BoxDecoration(
+                            color: Colors.grey.shade200,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          listBullet: const TextStyle(color: Colors.black87),
+                        ),
+                      ),
+                    // Quick Copy message button
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: InkWell(
+                        onTap: () {
+                          Clipboard.setData(
+                            ClipboardData(text: message.content),
+                          );
+                          SnackBarHelper.showSuccess(
+                            context,
+                            'Teks pesan berhasil disalin!',
+                          );
+                        },
+                        borderRadius: BorderRadius.circular(4),
+                        child: Padding(
+                          padding: const EdgeInsets.only(top: 4, left: 4),
+                          child: Icon(
+                            Icons.copy_rounded,
+                            size: 13,
+                            color: isUser
+                                ? Colors.white.withValues(alpha: 0.6)
+                                : Colors.grey.shade500,
+                          ),
+                        ),
                       ),
                     ),
+                  ],
+                  // Render executed transactions with action buttons (Edit / Koreksi & Batalkan)
+                  if (!isUser &&
+                      message.executedActions != null &&
+                      message.executedActions!.isNotEmpty) ...[
+                    const SizedBox(height: 10),
+                    ...message.executedActions!.map(
+                      (item) => Container(
+                        margin: const EdgeInsets.only(top: 6),
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.grey.shade300),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    item.title,
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 13,
+                                      color: Colors.black87,
+                                    ),
+                                  ),
+                                ),
+                                Text(
+                                  CurrencyFormatter.format(item.amount),
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 14,
+                                    color: item.isIncome
+                                        ? AppColors.success
+                                        : AppColors.error,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              item.subtitle,
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: Colors.grey.shade600,
+                              ),
+                            ),
+                            const Divider(height: 16),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.end,
+                              children: [
+                                if (item.transactionId != null)
+                                  TextButton.icon(
+                                    onPressed: () =>
+                                        _showEditTransactionSheet(item),
+                                    icon: const Icon(Icons.edit_outlined,
+                                        size: 14),
+                                    label: const Text(
+                                      'Koreksi / Edit',
+                                      style: TextStyle(fontSize: 11),
+                                    ),
+                                    style: TextButton.styleFrom(
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 8, vertical: 4),
+                                      minimumSize: Size.zero,
+                                      tapTargetSize:
+                                          MaterialTapTargetSize.shrinkWrap,
+                                    ),
+                                  ),
+                                const SizedBox(width: 8),
+                                TextButton.icon(
+                                  onPressed: () async {
+                                    final confirm =
+                                        await DialogHelper.showConfirmation(
+                                      context,
+                                      title: 'Batalkan Transaksi?',
+                                      message:
+                                          'Transaksi sebesar ${CurrencyFormatter.format(item.amount)} akan dihapus dan saldo dikembalikan.',
+                                      isDestructive: true,
+                                    );
+                                    if (confirm && context.mounted) {
+                                      final success = await context
+                                          .read<AiChatProvider>()
+                                          .undoExecutedAction(
+                                            item: item,
+                                            transactionProvider: context
+                                                .read<TransactionProvider>(),
+                                            accountProvider: context
+                                                .read<AccountProvider>(),
+                                          );
+                                      if (success && context.mounted) {
+                                        SnackBarHelper.showSuccess(
+                                          context,
+                                          'Transaksi berhasil dibatalkan!',
+                                        );
+                                      }
+                                    }
+                                  },
+                                  icon: const Icon(Icons.delete_outline,
+                                      size: 14, color: AppColors.error),
+                                  label: const Text(
+                                    'Batalkan',
+                                    style: TextStyle(
+                                        fontSize: 11, color: AppColors.error),
+                                  ),
+                                  style: TextButton.styleFrom(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 8, vertical: 4),
+                                    minimumSize: Size.zero,
+                                    tapTargetSize:
+                                        MaterialTapTargetSize.shrinkWrap,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),
           ),
           if (isUser) ...[
             const SizedBox(width: 8),
-            CircleAvatar(
-              backgroundColor: Colors.grey[300],
+            UserAvatar(
+              name: userName,
               radius: 16,
-              child: const Icon(Icons.person, size: 18, color: Colors.grey),
             ),
           ],
         ],

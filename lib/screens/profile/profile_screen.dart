@@ -6,6 +6,7 @@ import '../../core/constants.dart';
 import '../../providers/providers.dart';
 import '../../services/services.dart';
 import '../../widgets/common_widgets.dart';
+import '../../widgets/user_avatar.dart';
 import '../categories/categories_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
@@ -44,19 +45,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ),
                 child: Column(
                   children: [
-                    CircleAvatar(
+                    UserAvatar(
+                      name: userProvider.profile.name,
                       radius: 40,
                       backgroundColor: Colors.white,
-                      child: Text(
-                        userProvider.profile.name.isNotEmpty
-                            ? userProvider.profile.name.substring(0, 1).toUpperCase()
-                            : 'U',
-                        style: TextStyle(
-                          fontSize: 32,
-                          fontWeight: FontWeight.bold,
-                          color: currentPrimary,
-                        ),
-                      ),
                     ),
                     const SizedBox(height: 12),
                     Text(
